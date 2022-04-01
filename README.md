@@ -4,7 +4,7 @@ Projet Programation Systèmes Avances
 | Nom      | Prénom   | M1           |
 |----------|----------|--------------|
 | GRESH    | Clément  | IMPAIRS      |
-| LIGNIER  | Hugo     |              |
+| LIGNIER  | Hugo     | MATHS-INFO   |
 
 
 Universite de Paris
