@@ -1,9 +1,13 @@
 #ifndef M_FILE_H_
 #define M_FILE_H_
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 // STRUCTURES
 typedef struct MESSAGE{
-	enum{ RDWR,  RDONLY, WRONLY} flag;
+	typedef enum{ O_RDWR,  O_RDONLY, O_WRONLY } flag;
 	void* memory;
 } MESSAGE;
 
