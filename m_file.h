@@ -6,15 +6,16 @@
 #include <fcntl.h>
 
 // STRUCTURES
-typedef struct MESSAGE{
-	typedef enum{ O_RDWR,  O_RDONLY, O_WRONLY, O_CREAT, O_EXCL } flag;
-	void* memory;
-} MESSAGE;
-
 typedef struct mon_message{
 	long type;
 	char mtext[];
 } mon_message;
+
+typedef struct MESSAGE{
+	typedef enum{ O_RDWR,  O_RDONLY, O_WRONLY, O_CREAT, O_EXCL } flag;
+	int len;
+	mon_message tab_msg[len];
+} MESSAGE;
 
 typedef struct header{
 	int max_length_message;
