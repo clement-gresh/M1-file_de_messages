@@ -7,7 +7,7 @@
 
 // STRUCTURES
 typedef struct MESSAGE{
-	typedef enum{ O_RDWR,  O_RDONLY, O_WRONLY } flag;
+	typedef enum{ O_RDWR,  O_RDONLY, O_WRONLY, O_CREAT, O_EXCL } flag;
 	void* memory;
 } MESSAGE;
 
