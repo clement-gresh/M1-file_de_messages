@@ -8,14 +8,8 @@
 // STRUCTURES
 typedef struct mon_message{
 	long type;
-	char mtext[];
+	char* mtext;
 } mon_message;
-
-typedef struct MESSAGE{
-	typedef enum{ O_RDWR,  O_RDONLY, O_WRONLY, O_CREAT, O_EXCL } flag;
-	int len;
-	mon_message tab_msg[len];
-} MESSAGE;
 
 typedef struct header{
 	int max_length_message;
@@ -25,12 +19,16 @@ typedef struct header{
 	//semaphore ou mutex
 } header;
 
-/*
-typedef struct pipe{
+typedef struct file{
 	struct header head;
-	mon_message messages[]; // flexible array members are invalid
-} pipe;
-*/
+	mon_message *messages;
+} file;
+
+typedef struct MESSAGE{
+	int flag;
+	file *f;
+} MESSAGE;
+
 
 // FUNCTIONS
 MESSAGE *m_connexion( const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode );
