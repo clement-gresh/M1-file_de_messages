@@ -1,15 +1,14 @@
 #ifndef M_FILE_H_
 #define M_FILE_H_
 
-// STRUCTURES
-typedef struct MESSAGE{
-	enum{ RDWR,  RDONLY, WRONLY} flag;
-	void* memory;
-} MESSAGE;
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
+// STRUCTURES
 typedef struct mon_message{
 	long type;
-	char mtext[];
+	char* mtext;
 } mon_message;
 
 typedef struct header{
@@ -20,12 +19,16 @@ typedef struct header{
 	//semaphore ou mutex
 } header;
 
-/*
-typedef struct pipe{
+typedef struct file{
 	struct header head;
-	mon_message messages[]; // flexible array members are invalid
-} pipe;
-*/
+	mon_message *messages;
+} file;
+
+typedef struct MESSAGE{
+	int flag;
+	file *f;
+} MESSAGE;
+
 
 // FUNCTIONS
 MESSAGE *m_connexion( const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode );
