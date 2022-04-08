@@ -25,8 +25,9 @@ typedef struct file{
 } file;
 
 typedef struct MESSAGE{
+	const char name; // on le met dans le doute
 	int flag;
-	file *f;
+	file* shared_memory;
 } MESSAGE;
 
 
