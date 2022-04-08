@@ -8,12 +8,13 @@
 // <>
 
 int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
-	if(file->flag == RDONLY){
+	// ERREURS
+	if(file->flag == O_RDONLY){
 		printf("Impossible d'ecrire dans cette file.\n");
 		errno = EPERM;
 		exit(-1);
 	}
-	if(len > file->memory->max_length_message){
+	if(len > file->shared_memory->head.max_length_message){
 		printf("La taille du message excede la taille maximale autorisee.\n");
 		errno = EMSGSIZE;
 		exit(-1);
@@ -23,11 +24,20 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		errno = EIO;
 		exit(-1);
 	}
-	if(file->memory->first == file->memory->last && (msgflag & O_NONBLOCK)){
+	if((file->shared_memory->head.first == file->shared_memory->head.last) && (msgflag & O_NONBLOCK)){
 		printf("Le tableau est plein (envoi en mode non bloquant).\n");
 		errno = EAGAIN;
 		exit(-1);
 	}
+	//Pas besoin de verifier que last + len < first car c'est un tableau, chaque message prend une case
+	//Ainsi, si le tableau est plein, last = first
+
+	// ECRITURE
+	file->shared_memory->messages[file->shared_memory->head.last].mtext = msg;
+	// Incremente last modulo la taille du tableau de messages
+	file->shared_memory->head.last = (file->shared_memory->head.last + 1) % file->shared_memory->head.pipe_capacity;
+
+
 	return 0; // debug : ligne a changer
 }
 

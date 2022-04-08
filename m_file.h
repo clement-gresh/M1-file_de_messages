@@ -8,7 +8,7 @@
 // STRUCTURES
 typedef struct mon_message{
 	long type;
-	char* mtext;
+	const char* mtext;
 } mon_message;
 
 typedef struct header{
