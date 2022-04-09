@@ -43,4 +43,6 @@ size_t m_message_len(MESSAGE *);
 size_t m_capacite(MESSAGE *);
 size_t m_nb(MESSAGE *);
 
+int initialiser_mutex(pthread_mutex_t *pmutex);
+
 #endif /* M_FILE_H_ */

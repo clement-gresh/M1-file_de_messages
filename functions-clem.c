@@ -42,8 +42,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	}
 
 	// Ecrit le message dans la memoire partagee
-	file->shared_memory->messages[file->shared_memory->head.last].type = getpid();
-	file->shared_memory->messages[file->shared_memory->head.last].mtext = msg;
+	//file->shared_memory->messages[file->shared_memory->head.last] = &(struct mon_message*) msg;
 
 	// DEBUG
 	printf("La valeur du type est %ld.\n", file->shared_memory->messages[file->shared_memory->head.last].type);
@@ -67,18 +66,6 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	return 0;
 }
-
-int initialiser_mutex(pthread_mutex_t *pmutex){
-	pthread_mutexattr_t mutexattr;
-	int code;
-	if( ( code = pthread_mutexattr_init(&mutexattr) ) != 0)
-		return code;
-	if( ( code = pthread_mutexattr_setpshared(&mutexattr, PTHREAD_PROCESS_SHARED) ) != 0)
-		return code;
-	code = pthread_mutex_init(pmutex, &mutexattr) ;
-	return code;
-}
-
 
 
 int main(int argc, const char * argv[]) {

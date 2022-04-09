@@ -10,9 +10,10 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <pthread.h>
 
 /*
-#define S_IRWXU 0000700    /* RWX mask for owner 
+#define S_IRWXU 0000700     RWX mask for owner
 #define S_IRUSR 0000400     R for owner 
 #define S_IWUSR 0000200   W for owner 
 #define S_IXUSR 0000100     X for owner 
@@ -67,7 +68,7 @@ int BitAt(long unsigned int x, int i){
 
 // nom commence par un unique /
 MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max, mode_t mode){
-	// ne vérifie pas le partage de mémoire Anonyme
+	// ne verifie pas le partage de memoire Anonyme
 
 	int fd = shm_open(nom, options, mode);
 	if( fd == -1 ){ perror("shm_open"); exit(1);}
@@ -82,7 +83,7 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max,
 	h.first = 0;
 	h.last = 0;
 
-	file f;
+	line f;
 	f.head = h;
 	f.messages = malloc(sizeof(m)*nb_msg);
 
@@ -110,7 +111,7 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max,
 	int options_i=0;
 	size_t len_int = sizeof(int);
 
-	mfor(int i=0;i<len_int;i++){
+	for(int i=0;i<len_int;i++){
 		options_i = BitAt(options_i,i);
 		if((options_i==BitAt(O_WRONLY,i))==1){
 			opt_wr = 1;
@@ -133,10 +134,25 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max,
 		}
 	}
 
-	file *adrr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0) ;
+	line *adrr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0) ;
+
+	if(initialiser_mutex(&adrr->head.mutex) > 0){ perror("init mutex"); exit(1); }
+
 	msg->shared_memory = adrr;
 
 	return msg;
+}
+
+
+int initialiser_mutex(pthread_mutex_t *pmutex){
+	pthread_mutexattr_t mutexattr;
+	int code;
+	if( ( code = pthread_mutexattr_init(&mutexattr) ) != 0)
+		return code;
+	if( ( code = pthread_mutexattr_setpshared(&mutexattr, PTHREAD_PROCESS_SHARED) ) != 0)
+		return code;
+	code = pthread_mutex_init(pmutex, &mutexattr) ;
+	return code;
 }
 
 
