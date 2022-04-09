@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <sys/mman.h>
 
 #include "m_file.h"
 
@@ -32,14 +35,50 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	//Pas besoin de verifier que last + len < first car c'est un tableau, chaque message prend une case
 	//Ainsi, si le tableau est plein, last = first
 
-	// ECRITURE
+	// Lock du mutex
+	if(pthread_mutex_lock(&file->shared_memory->head.mutex) != 0){
+		perror("lock mutex");
+		exit(-1);
+	}
+
+	// Ecrit le message dans la memoire partagee
+	file->shared_memory->messages[file->shared_memory->head.last].type = getpid();
 	file->shared_memory->messages[file->shared_memory->head.last].mtext = msg;
-	// Incremente last modulo la taille du tableau de messages
+
+	// DEBUG
+	printf("La valeur du type est %ld.\n", file->shared_memory->messages[file->shared_memory->head.last].type);
+	printf("Le msg est %s.\n", file->shared_memory->messages[file->shared_memory->head.last].mtext);
+	// FIN DEBUG
+
+	// Incremente 'last'
 	file->shared_memory->head.last = (file->shared_memory->head.last + 1) % file->shared_memory->head.pipe_capacity;
 
+	// Synchronise la memoire
+	if(msync(file, sizeof(MESSAGE), MS_SYNC) == -1) {
+		perror("Function msync()");
+		exit(-1);
+	}
 
-	return 0; // debug : ligne a changer
+	// Unlock le mutex
+	if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){
+		perror("UNlock mutex");
+		exit(-1);
+	}
+
+	return 0;
 }
+
+int initialiser_mutex(pthread_mutex_t *pmutex){
+	pthread_mutexattr_t mutexattr;
+	int code;
+	if( ( code = pthread_mutexattr_init(&mutexattr) ) != 0)
+		return code;
+	if( ( code = pthread_mutexattr_setpshared(&mutexattr, PTHREAD_PROCESS_SHARED) ) != 0)
+		return code;
+	code = pthread_mutex_init(pmutex, &mutexattr) ;
+	return code;
+}
+
 
 
 int main(int argc, const char * argv[]) {

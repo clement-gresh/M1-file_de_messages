@@ -16,18 +16,18 @@ typedef struct header{
 	int pipe_capacity;
 	int first;
 	int last;
-	//semaphore ou mutex
+	pthread_mutex_t mutex;//semaphore ou mutex
 } header;
 
-typedef struct file{
+typedef struct line{
 	struct header head;
 	mon_message *messages;
-} file;
+} line;
 
 typedef struct MESSAGE{
-	const char name; // on le met dans le doute
+	char name; // on le met dans le doute
 	int flag;
-	file* shared_memory;
+	line* shared_memory;
 } MESSAGE;
 
 

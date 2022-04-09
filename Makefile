@@ -1,10 +1,11 @@
 CPP=gcc # g++ ?
 CFLAGS= -Wall -g -pedantic
+LDLIBS = -pthread
 
 all : functions-clem
 
 functions-clem : functions-clem.o
-	$(CPP) $(CFLAGS) -o $@ $^
+	$(CPP) $(CFLAGS) $(LDLIBS) -o $@ $^
 
 
 functions-clem.o : functions-clem.c
