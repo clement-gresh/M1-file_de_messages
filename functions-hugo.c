@@ -1,15 +1,5 @@
 #include "m_file.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
-#include <pthread.h>
 #include <pthread.h>
 
 /*
@@ -100,11 +90,13 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max,
 	free(f.messages);
 	free(msg->shared_memory);
 
+	/*
 	int opt_rd = 0;
 	int opt_wr = 0;
 	int opt_rdwr = 0;
 	int opt_excl = 0;
 	int opt_creat = 0;
+	*/
 
 	int prot = 0;
 
@@ -114,23 +106,23 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max,
 	for(int i=0;i<len_int;i++){
 		options_i = BitAt(options_i,i);
 		if((options_i==BitAt(O_WRONLY,i))==1){
-			opt_wr = 1;
+			//opt_wr = 1;
 			prot= prot | PROT_WRITE;
 		}
 		if((options_i==BitAt(O_RDONLY,i))==1){
-			opt_rd = 1;
+			//opt_rd = 1;
 			prot = prot | PROT_READ;
 		}
 		if((options_i==BitAt(O_RDWR,i))==1){
-			opt_rdwr = 1;
+			//opt_rdwr = 1;
 			prot = prot | PROT_READ | PROT_WRITE;
 		}
 		if((options_i==BitAt(O_EXCL,i))==1){
-			opt_excl = 1;
+			//opt_excl = 1;
 			prot = prot | PROT_EXEC;
 		}
 		if((options_i==BitAt(O_CREAT,i))==1){
-			opt_creat = 1;
+			//opt_creat = 1;
 		}
 	}
 
@@ -153,10 +145,4 @@ int initialiser_mutex(pthread_mutex_t *pmutex){
 		return code;
 	code = pthread_mutex_init(pmutex, &mutexattr) ;
 	return code;
-}
-
-
-int main(int argc, const char * argv[]) {
-
-	return EXIT_SUCCESS;
 }

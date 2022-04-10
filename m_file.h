@@ -1,14 +1,21 @@
 #ifndef M_FILE_H_
 #define M_FILE_H_
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
+#include <pthread.h>
+#include <sys/mman.h>
+#include <assert.h>
 
 // STRUCTURES
 typedef struct mon_message{
 	long type;
-	const char* mtext;
+	char* mtext;
 } mon_message;
 
 typedef struct header{

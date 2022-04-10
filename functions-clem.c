@@ -1,11 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <pthread.h>
-#include <sys/mman.h>
-
 #include "m_file.h"
 
 // <>
@@ -41,8 +33,9 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		exit(-1);
 	}
 
+
 	// Ecrit le message dans la memoire partagee
-	//file->shared_memory->messages[file->shared_memory->head.last] = &(struct mon_message*) msg;
+	file->shared_memory->messages[file->shared_memory->head.last] = *(mon_message*) msg;
 
 	// DEBUG
 	printf("La valeur du type est %ld.\n", file->shared_memory->messages[file->shared_memory->head.last].type);
@@ -66,11 +59,3 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	return 0;
 }
-
-
-int main(int argc, const char * argv[]) {
-
-	return EXIT_SUCCESS;
-}
-
-

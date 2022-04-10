@@ -3,4 +3,6 @@
 .settings*
 *~*
 functions-clem
+functions-hugo
+project-tests
 *.o
