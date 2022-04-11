@@ -126,11 +126,13 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max,
 		}
 	}
 
-	line *adrr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0) ;
+	line *addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0) ;
 
-	if(initialiser_mutex(&adrr->head.mutex) > 0){ perror("init mutex"); exit(1); }
+	if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
+	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
+	if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
 
-	msg->shared_memory = adrr;
+	msg->shared_memory = addr;
 
 	return msg;
 }
@@ -144,5 +146,15 @@ int initialiser_mutex(pthread_mutex_t *pmutex){
 	if( ( code = pthread_mutexattr_setpshared(&mutexattr, PTHREAD_PROCESS_SHARED) ) != 0)
 		return code;
 	code = pthread_mutex_init(pmutex, &mutexattr) ;
+	return code;
+}
+
+int initialiser_cond(pthread_cond_t *pcond){
+	pthread_condattr_t condattr;
+	int code;
+	if( ( code = pthread_condattr_init(&condattr) ) != 0 ) return code;
+	if( ( code = pthread_condattr_setpshared(&condattr, PTHREAD_PROCESS_SHARED) ) != 0 )
+		return code;
+	code = pthread_cond_init(pcond, &condattr) ;
 	return code;
 }

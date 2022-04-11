@@ -24,6 +24,8 @@ typedef struct header{
 	int first;
 	int last;
 	pthread_mutex_t mutex;//semaphore ou mutex
+	pthread_cond_t rcond;
+	pthread_cond_t wcond;
 } header;
 
 typedef struct line{
@@ -38,7 +40,7 @@ typedef struct MESSAGE{
 } MESSAGE;
 
 
-// FUNCTIONS
+// PROJECT FUNCTIONS
 MESSAGE *m_connexion( const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode );
 int m_deconnexion(MESSAGE *file);
 int m_destruction(const char *nom);
@@ -50,6 +52,11 @@ size_t m_message_len(MESSAGE *);
 size_t m_capacite(MESSAGE *);
 size_t m_nb(MESSAGE *);
 
+
+// ADDITIONNAL FUNCTIONS
 int initialiser_mutex(pthread_mutex_t *pmutex);
+int initialiser_cond(pthread_cond_t *pcond);
+int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag);
+
 
 #endif /* M_FILE_H_ */
