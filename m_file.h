@@ -14,6 +14,8 @@
 #include <sys/mman.h>
 #include <assert.h>
 
+#define UNLOCK true
+
 // STRUCTURES
 typedef struct mon_message{
 	long type;
