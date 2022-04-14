@@ -59,7 +59,8 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal wcond"); exit(-1);}
 
 	// Ecrit le message dans la memoire partagee
-	file->shared_memory->messages[position] = *(mon_message*) msg;
+	memcpy(file->shared_memory->messages[position].mtext, msg, len);
+	//memcpy(file->shared_memory->messages[position].type, (mon_message*) msg->type, len);
 
 	// DEBUG
 	printf("La valeur du type est %ld.\n", file->shared_memory->messages[file->shared_memory->head.last].type);
@@ -90,7 +91,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	// Lock du mutex
 	if(pthread_mutex_lock(&file->shared_memory->head.mutex) != 0){ perror("lock mutex"); exit(-1); }
 
-	ssize_t msg_size;
+	ssize_t msg_size = -1;
 	int msgNumber;
 	bool msgToRead = false;
 
@@ -133,10 +134,8 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		}
 	}
 	// Copie et suppression du message
-	msg_size = file->shared_memory->messages[msgNumber].size;
-	msg = &file->shared_memory->messages[msgNumber];
-	// /!\ Est-ce que ca marche ? Le tableau n'est-il pas cense contenir des pointeurs (donc il ne devrait pas y avoir besoin de &) ?
-	//file->shared_memory->messages[msgNumber]=
+	memcpy(msg, file->shared_memory->messages[msgNumber].mtext, len);
+	// file->shared_memory->messages[msgNumber]=NULL;
 
 	return msg_size;
 }

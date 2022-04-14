@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -16,7 +17,7 @@
 // STRUCTURES
 typedef struct mon_message{
 	long type;
-	char* mtext;
+	char mtext[];
 } mon_message;
 
 typedef struct header{
