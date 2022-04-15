@@ -137,6 +137,21 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max,
 	return msg;
 }
 
+int m_deconnexion(MESSAGE *file){
+	file->shared_memory = NULL;
+}
+
+int m_destruction(const char *nom){
+	int fd = shm_open(nom, O_RDONLY,0);
+
+	struct stat bufStat ;
+	int rsStat = fstat(fd, &bufStat);
+	int len = bufStat.st_size;
+
+	line *srcmem = mmap(0, len , PROT_READ , MAP_PRIVATE | MAP_SHARED, fd, 0);
+
+	munmap(srcmem, len);
+}
 
 int initialiser_mutex(pthread_mutex_t *pmutex){
 	pthread_mutexattr_t mutexattr;
