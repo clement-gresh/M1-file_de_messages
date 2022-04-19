@@ -17,10 +17,14 @@
 #define UNLOCK true
 #define NO_UNLOCK false
 
+#define TAILLE_MAX_MESSAGE 1024
+#define NOMBRE_MAX_MESSAGE 256
+#define TAILLE_NOM 16
+
 // STRUCTURES
 typedef struct mon_message{
 	long type;
-	char mtext[];
+	char mtext[TAILLE_MAX_MESSAGE];
 } mon_message;
 
 typedef struct header{
@@ -35,11 +39,11 @@ typedef struct header{
 
 typedef struct line{
 	struct header head;
-	mon_message *messages;
+	mon_message messages[NOMBRE_MAX_MESSAGE];
 } line;
 
 typedef struct MESSAGE{
-	char name; // on le met dans le doute
+	char name[TAILLE_NOM]; // on le met dans le doute
 	int flag;
 	line* shared_memory;
 } MESSAGE;

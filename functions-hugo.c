@@ -56,16 +56,20 @@ int BitAt(long unsigned int x, int i){
 	return (x >> i) & 1;
 }
 
+void initialise_taille_max(MESSAGE *msg, int nb_msg, int len_max){
+	assert(nb_msg < NOMBRE_MAX_MESSAGE);
+	assert(len_max < TAILLE_MAX_MESSAGE);
+
+	msg->shared_memory->head.max_length_message = len_max;
+	msg->shared_memory->head.pipe_capacity = nb_msg;
+}
+
 // nom commence par un unique /
-MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max, mode_t mode){
+MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
 	// ne verifie pas le partage de memoire Anonyme
 
 	int fd = shm_open(nom, options, mode);
 	if( fd == -1 ){ perror("shm_open"); exit(1);}
-
-	mon_message m;
-	m.type = 0;
-	m.mtext = malloc(sizeof(char)*len_max);
 
 	header h;
 	h.max_length_message = len_max;
@@ -75,20 +79,17 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max,
 
 	line f;
 	f.head = h;
-	f.messages = malloc(sizeof(m)*nb_msg);
 
-	MESSAGE *msg;
-	msg->name = *nom;
+	MESSAGE *msg = malloc(sizeof(MESSAGE));
+	size_t taille = sizeof(nom);
+	assert(taille<TAILLE_NOM);
+	memcpy(msg->name, nom, taille);
 	msg->flag = options;
 	msg->shared_memory = malloc(sizeof(f));
 
-	if( ftruncate( fd, sizeof(m)) == -1){perror("ftruncate"); exit(1);}
-	struct stat bufStat ;
+	if( ftruncate( fd, sizeof(line)) == -1){perror("ftruncate"); exit(1);}
+	struct stat bufStat;
 	fstat(fd, &bufStat);
-
-	free(m.mtext);
-	free(f.messages);
-	free(msg->shared_memory);
 
 	/*
 	int opt_rd = 0;
@@ -133,6 +134,7 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg,size_t len_max,
 	if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
 
 	msg->shared_memory = addr;
+	initialise_taille_max(msg,nb_msg,len_max);
 
 	return msg;
 }
