@@ -15,6 +15,7 @@
 #include <assert.h>
 
 #define UNLOCK true
+#define NO_UNLOCK false
 
 // STRUCTURES
 typedef struct mon_message{
@@ -60,6 +61,7 @@ size_t m_nb(MESSAGE *);
 // ADDITIONNAL FUNCTIONS
 int initialiser_mutex(pthread_mutex_t *pmutex);
 int initialiser_cond(pthread_cond_t *pcond);
+int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error);
 int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag);
 
 

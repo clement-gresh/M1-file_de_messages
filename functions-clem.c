@@ -2,6 +2,26 @@
 
 // <>
 
+
+// return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'n', EAGAIN);
+
+int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
+	perror(txt);
+	if(unlock){
+		if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
+	}
+	if(signal=='r' || signal == 'b'){
+		if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
+	}
+	if(signal=='w' || signal == 'b'){
+		if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal wcond"); exit(-1);}
+	}
+	if(error > 0) { errno = error; }
+	exit(-1);
+}
+
+
+
 int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(file->flag == O_RDONLY){
 		printf("Impossible d'ecrire dans cette file.\n");
@@ -107,24 +127,26 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 			int first =file->shared_memory->head.first;
 			int last = file->shared_memory->head.last;
 			for(int i = first; i != last; i = (i+1) % pipe_capacity){
-				if((type>0 && file->shared_memory->messages[i].type == type)
-						|| (type<0 && file->shared_memory->messages[i].type <= -type)){
-					msg_to_read = true;
-					msg_number = i;
-					break;
+				// S'il y a un message à la case i
+				if(file->shared_memory->messages[i].type != -1){
+					if((type>0 && file->shared_memory->messages[i].type == type)
+							|| (type<0 && file->shared_memory->messages[i].type <= -type)){
+						msg_to_read = true;
+						msg_number = i;
+						break;
+					}
 				}
 			}
 		}
 		// Exit si pas de message et mode non bloquant
 		if(flags == O_NONBLOCK && !msg_to_read){
-			if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
-			if(file->shared_memory->head.first != -1){
-				if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
-			}
-			if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal rcond"); exit(-1);}
-			printf("Pas de message correspondant a type (reception en mode non bloquant).\n");
-			errno = EAGAIN;
-			exit(-1);
+			/*
+			// Determine si on fait un signal sur wcond et/ou rcond
+			char signal = 'n';
+			if(file->shared_memory->head.first != file->shared_memory->head.last){signal = 'w';}
+			if(file->shared_memory->head.first != -1){signal = (signal == 'w') ? 'b' : 'r';}
+			*/
+			return my_error("Pas de message \'type\' (mode non bloquant).\n", file, UNLOCK, 'b', EAGAIN);
 		}
 		// Attente si pas de message et mode bloquant
 		else if(!msg_to_read){
@@ -135,31 +157,35 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	}
 	msg_size = strlen(file->shared_memory->messages[msg_number].mtext);
 	if(msg_size > len){
-		printf("Memoire allouee trop petite pour recevoir le message.");
-		errno = EAGAIN;
-		exit(-1);
+		/*
+		// Determine si on fait un signal sur wcond et/ou rcond
+		char signal = 'n';
+		if(file->shared_memory->head.first != file->shared_memory->head.last){signal = 'w';}
+		if(file->shared_memory->head.first != -1){signal = (signal == 'w') ? 'b' : 'r';}
+		*/
+		return my_error("Memoire allouee trop petite pour recevoir le message.", file, UNLOCK, 'b', EMSGSIZE);
 	}
 	// Modifie first si le message lu est le premier de la file
 	if(msg_number == file->shared_memory->head.first){
-		// incrementer first tant qu'on ne rencontre pas de message (il peut y avoir des cases vides dues
-		// a type > 0) ou bien jusqu'à ce qu'on arrive a last (i.e. tableau est vide)
-		// while(file->shared_memory->messages[file->shared_memory->head.first] != un message)
-		file->shared_memory->head.first =
-				(file->shared_memory->head.first + 1) % file->shared_memory->head.pipe_capacity;
+		// Incremente first tant que pas de message (case vide) et qu'on n'est pas a 'last'
+		int first = (msg_number + 1) % file->shared_memory->head.pipe_capacity;
+		while(first != file->shared_memory->head.last && file->shared_memory->messages[first].type == -1){
+			first = (first + 1) % file->shared_memory->head.pipe_capacity;
+		}
 		if(file->shared_memory->head.first == file->shared_memory->head.last){
 			file->shared_memory->head.first = -1;
-			//break;
 		}
+		else { file->shared_memory->head.first = first; }
 	}
 	// Copie et suppression du message
-	memcpy(msg, file->shared_memory->messages[msg_number].mtext, len);
-	// file->shared_memory->messages[msgNumber]=NULL;
+	memcpy(msg, file->shared_memory->messages[msg_number].mtext, len); // len doit être la taille du message, pas de la memoire de reception
+	file->shared_memory->messages[msg_number].type = -1;
+	memset(file->shared_memory->messages[msg_number].mtext, ' ', len);
+	file->shared_memory->messages[msg_number].mtext[len] = '\0';
 
 	// Synchronise la memoire
-	if(msync(file, sizeof(MESSAGE), MS_SYNC) == -1) {
-		perror("Function msync()");
-		exit(-1);
-	}
+	if(msync(file, sizeof(MESSAGE), MS_SYNC) == -1) {perror("Function msync()"); exit(-1);}
+
 	// Unlock le mutex
 	if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 
@@ -169,19 +195,3 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 
 	return msg_size;
 }
-
-int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
-	perror(txt);
-	if(unlock){
-		if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
-	}
-	if(signal=='r' || signal == 'b'){
-		if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
-	}
-	if(signal=='w' || signal == 'b'){
-		if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal wcond"); exit(-1);}
-	}
-	if(error > 0) { errno = error; }
-	exit(-1);
-}
-
