@@ -24,6 +24,7 @@
 // STRUCTURES
 typedef struct mon_message{
 	long type;
+	ssize_t length;
 	char mtext[TAILLE_MAX_MESSAGE];
 } mon_message;
 
@@ -32,7 +33,7 @@ typedef struct header{
 	int pipe_capacity;
 	int first;
 	int last;
-	pthread_mutex_t mutex;//semaphore ou mutex
+	pthread_mutex_t mutex;
 	pthread_cond_t rcond;
 	pthread_cond_t wcond;
 } header;

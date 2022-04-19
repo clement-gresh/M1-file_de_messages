@@ -64,7 +64,7 @@ void initialise_taille_max(MESSAGE *msg, int nb_msg, int len_max){
 	msg->shared_memory->head.pipe_capacity = nb_msg;
 }
 
-// nom commence par un unique /
+// nom doit commencer par un unique /
 MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
 	// ne verifie pas le partage de memoire Anonyme
 

@@ -20,8 +20,7 @@ int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
 	exit(-1);
 }
 
-
-
+// Debug : my_error a utiliser
 int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(file->flag == O_RDONLY){
 		printf("Impossible d'ecrire dans cette file.\n");
@@ -155,7 +154,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 			}
 		}
 	}
-	msg_size = strlen(file->shared_memory->messages[msg_number].mtext);
+	msg_size = file->shared_memory->messages[msg_number].length;
 	if(msg_size > len){
 		/*
 		// Determine si on fait un signal sur wcond et/ou rcond
@@ -177,11 +176,9 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		}
 		else { file->shared_memory->head.first = first; }
 	}
-	// Copie et suppression du message
-	memcpy(msg, file->shared_memory->messages[msg_number].mtext, len); // len doit être la taille du message, pas de la memoire de reception
+	// Copie et "suppression" du message
+	memcpy(msg, file->shared_memory->messages[msg_number].mtext, msg_size);
 	file->shared_memory->messages[msg_number].type = -1;
-	memset(file->shared_memory->messages[msg_number].mtext, ' ', len);
-	file->shared_memory->messages[msg_number].mtext[len] = '\0';
 
 	// Synchronise la memoire
 	if(msync(file, sizeof(MESSAGE), MS_SYNC) == -1) {perror("Function msync()"); exit(-1);}
