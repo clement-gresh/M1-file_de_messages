@@ -37,7 +37,7 @@ int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		errno = EIO;
 		exit(-1);
 	}
-	if((file->shared_memory->head.first == file->shared_memory->head.last) && (msgflag == O_NONBLOCK)){
+	if((file->shared_memory->head.first_free == -1) && (msgflag == O_NONBLOCK)){
 		printf("Le tableau est plein (envoi en mode non bloquant).\n");
 		errno = EAGAIN;
 		exit(-1);
@@ -53,7 +53,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(pthread_mutex_lock(&file->shared_memory->head.mutex) != 0){ perror("lock mutex"); exit(-1); }
 
 	// Attente si tableau plein (sauf si O_NONBLOCK)
-	while((file->shared_memory->head.first == file->shared_memory->head.last)){
+	while((file->shared_memory->head.first_occupied == file->shared_memory->head.first_free)){
 		if(msgflag == O_NONBLOCK) {
 			if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 			if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
@@ -66,10 +66,23 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		}
 	}
 
-	// Incremente 'last' et met a jour 'first' si besoin
-	int position = file->shared_memory->head.last;
-	file->shared_memory->head.last = (position + 1) % file->shared_memory->head.pipe_capacity;
-	if(file->shared_memory->head.first == -1) { file->shared_memory->head.first = position; }
+	// Met a jour 'first_free', 'first_occupied' et 'last_occupied'
+	int current = file->shared_memory->head.first_free;
+	int offset_free = file->shared_memory->messages[current].offset;
+	file->shared_memory->messages[current].offset = 0;
+
+	// Si le tableau est plein une fois l'envoi fait
+	if(offset_free == 0){ file->shared_memory->head.first_free = -1; }
+	else{ file->shared_memory->head.first_free = current + offset_free; }
+
+	// Si le tableau etait vide avant l'envoi
+	if(file->shared_memory->head.first_occupied == -1) { file->shared_memory->head.first_occupied = current; }
+	else{
+		int last_occupied = file->shared_memory->head.last_occupied;
+		file->shared_memory->messages[last_occupied].offset = last_occupied - current;
+
+	}
+	file->shared_memory->head.last_occupied = current;
 
 	// Unlock le mutex
 	if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
@@ -78,12 +91,11 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal wcond"); exit(-1);}
 
 	// Ecrit le message dans la memoire partagee
-	memcpy(file->shared_memory->messages[position].mtext, msg, len);
-	//memcpy(file->shared_memory->messages[position].type, (mon_message*) msg->type, len);
+	memcpy(file->shared_memory->messages[current].mtext, msg, len);
 
 	// DEBUG
-	printf("La valeur du type est %ld.\n", file->shared_memory->messages[file->shared_memory->head.last].type);
-	printf("Le msg est %s.\n", file->shared_memory->messages[file->shared_memory->head.last].mtext);
+	printf("La valeur du type est %ld.\n", file->shared_memory->messages[file->shared_memory->head.first_free].type);
+	printf("Le msg est %s.\n", file->shared_memory->messages[file->shared_memory->head.first_free].mtext);
 	// FIN DEBUG
 
 	// Synchronise la memoire
@@ -111,29 +123,26 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	if(pthread_mutex_lock(&file->shared_memory->head.mutex) != 0){ perror("lock mutex"); exit(-1); }
 
 	ssize_t msg_size;
-	int msg_number;
+	int current;
 	bool msg_to_read = false;
 
 	while(!msg_to_read){
-		// Verifie s'il y a un message dans la file
-		if(type==0 && file->shared_memory->head.first != -1){
-			msg_to_read = true;
-			msg_number = file->shared_memory->head.first;
-		}
+		current = file->shared_memory->head.first_occupied;
+
 		// Verifie s'il y a un message correspondant a 'type' dans la file
-		else if(type != 0 && file->shared_memory->head.first != -1){
-			int pipe_capacity = file->shared_memory->head.pipe_capacity;
-			int first =file->shared_memory->head.first;
-			int last = file->shared_memory->head.last;
-			for(int i = first; i != last; i = (i+1) % pipe_capacity){
-				// S'il y a un message à la case i
-				if(file->shared_memory->messages[i].type != -1){
-					if((type>0 && file->shared_memory->messages[i].type == type)
-							|| (type<0 && file->shared_memory->messages[i].type <= -type)){
-						msg_to_read = true;
-						msg_number = i;
-						break;
-					}
+		if(type==0 && current != -1){
+			msg_to_read = true;
+		}
+		else if(type != 0 && current != -1){
+			while(true){
+				if((type>0 && file->shared_memory->messages[current].type == type)
+						|| (type<0 && file->shared_memory->messages[current].type <= -type)){
+					msg_to_read = true;
+					break;
+				}
+				else{
+					if(current == file->shared_memory->head.last_occupied) { break; }
+					current = current + file->shared_memory->messages[current].offset;
 				}
 			}
 		}
@@ -154,7 +163,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 			}
 		}
 	}
-	msg_size = file->shared_memory->messages[msg_number].length;
+	msg_size = file->shared_memory->messages[current].length;
 	if(msg_size > len){
 		/*
 		// Determine si on fait un signal sur wcond et/ou rcond
@@ -164,21 +173,50 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		*/
 		return my_error("Memoire allouee trop petite pour recevoir le message.", file, UNLOCK, 'b', EMSGSIZE);
 	}
-	// Modifie first si le message lu est le premier de la file
-	if(msg_number == file->shared_memory->head.first){
-		// Incremente first tant que pas de message (case vide) et qu'on n'est pas a 'last'
-		int first = (msg_number + 1) % file->shared_memory->head.pipe_capacity;
-		while(first != file->shared_memory->head.last && file->shared_memory->messages[first].type == -1){
-			first = (first + 1) % file->shared_memory->head.pipe_capacity;
+	// MAJ de la liste chainee de cases occupee
+	int search = file->shared_memory->head.first_occupied;
+	int current_offset = file->shared_memory->messages[current].offset;
+	int search_offset = file->shared_memory->messages[search].offset;
+
+		// Si current est la premiere case de la LC
+	if(current == search){
+			// Si current est aussi la derniere case de la LC
+		if(file->shared_memory->messages[current].offset == 0){
+			file->shared_memory->head.first_occupied = -1;
+			file->shared_memory->head.last_occupied = -1;
 		}
-		if(file->shared_memory->head.first == file->shared_memory->head.last){
-			file->shared_memory->head.first = -1;
+		else{
+			file->shared_memory->head.first_occupied = current + current_offset;
 		}
-		else { file->shared_memory->head.first = first; }
 	}
+	else{
+		while(search != current){
+			// Si current est la prochaine case de la LC
+			if(search + search_offset == current){
+				// Si current est la derniere case de la LC
+				if(current_offset == 0) {
+					file->shared_memory->messages[search].offset = 0;
+					file->shared_memory->head.last_occupied = search;
+				}
+				else{
+					file->shared_memory->messages[search].offset = search_offset + current_offset;
+				}
+			}
+			search = search + search_offset;
+			search_offset = file->shared_memory->messages[search].offset;
+		}
+	}
+	// MAJ de la liste chainee de cases vides
+	int last_free = file->shared_memory->head.last_free;
+
+	if(last_free == -1) { file->shared_memory->head.first_free = current; }
+	else{ file->shared_memory->messages[last_free].offset = last_free - current; }
+	file->shared_memory->head.last_free = current;
+	file->shared_memory->messages[current].offset = 0;
+
+
 	// Copie et "suppression" du message
-	memcpy(msg, file->shared_memory->messages[msg_number].mtext, msg_size);
-	file->shared_memory->messages[msg_number].type = -1;
+	memcpy(msg, file->shared_memory->messages[current].mtext, msg_size);
 
 	// Synchronise la memoire
 	if(msync(file, sizeof(MESSAGE), MS_SYNC) == -1) {perror("Function msync()"); exit(-1);}

@@ -74,8 +74,8 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	header h;
 	h.max_length_message = len_max;
 	h.pipe_capacity = nb_msg;
-	h.first = 0;
-	h.last = 0;
+	h.first_occupied = 0;
+	h.first_free = 0;
 
 	line f;
 	f.head = h;

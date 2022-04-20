@@ -25,14 +25,17 @@
 typedef struct mon_message{
 	long type;
 	ssize_t length;
+	int offset;
 	char mtext[TAILLE_MAX_MESSAGE];
 } mon_message;
 
 typedef struct header{
 	int max_length_message;
 	int pipe_capacity;
-	int first;
-	int last;
+	int first_occupied;
+	int last_occupied;
+	int first_free;
+	int last_free;
 	pthread_mutex_t mutex;
 	pthread_cond_t rcond;
 	pthread_cond_t wcond;
