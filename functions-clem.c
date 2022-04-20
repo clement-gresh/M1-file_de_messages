@@ -148,12 +148,6 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		}
 		// Exit si pas de message et mode non bloquant
 		if(flags == O_NONBLOCK && !msg_to_read){
-			/*
-			// Determine si on fait un signal sur wcond et/ou rcond
-			char signal = 'n';
-			if(file->shared_memory->head.first != file->shared_memory->head.last){signal = 'w';}
-			if(file->shared_memory->head.first != -1){signal = (signal == 'w') ? 'b' : 'r';}
-			*/
 			return my_error("Pas de message \'type\' (mode non bloquant).\n", file, UNLOCK, 'b', EAGAIN);
 		}
 		// Attente si pas de message et mode bloquant
@@ -165,12 +159,6 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	}
 	msg_size = file->shared_memory->messages[current].length;
 	if(msg_size > len){
-		/*
-		// Determine si on fait un signal sur wcond et/ou rcond
-		char signal = 'n';
-		if(file->shared_memory->head.first != file->shared_memory->head.last){signal = 'w';}
-		if(file->shared_memory->head.first != -1){signal = (signal == 'w') ? 'b' : 'r';}
-		*/
 		return my_error("Memoire allouee trop petite pour recevoir le message.", file, UNLOCK, 'b', EMSGSIZE);
 	}
 	// MAJ de la liste chainee de cases occupee

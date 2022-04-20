@@ -1,7 +1,5 @@
 #include "m_file.h"
 
-#include <pthread.h>
-
 /*
 #define S_IRWXU 0000700     RWX mask for owner
 #define S_IRUSR 0000400     R for owner 
@@ -50,6 +48,7 @@ typedef struct MESSAGE{
 } MESSAGE;
 */
 
+/*
 // Renvoie le bit numero i d'un int
 int BitAt(long unsigned int x, int i){
 	assert(0 <= i && i < 32);
@@ -63,6 +62,7 @@ void initialise_taille_max(MESSAGE *msg, int nb_msg, int len_max){
 	msg->shared_memory->head.max_length_message = len_max;
 	msg->shared_memory->head.pipe_capacity = nb_msg;
 }
+*/
 
 // nom doit commencer par un unique /
 MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
@@ -71,14 +71,19 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	int fd = shm_open(nom, options, mode);
 	if( fd == -1 ){ perror("shm_open"); exit(1);}
 
+	/*
 	header h;
 	h.max_length_message = len_max;
 	h.pipe_capacity = nb_msg;
-	h.first_occupied = 0;
+	h.first_occupied = -1;
+	h.last_occupied = -1;
 	h.first_free = 0;
+	h.last_free = h.pipe_capacity - 1;
 
 	line f;
 	f.head = h;
+	for(int i = 0; i < nb_msg - 1; i++){ f.messages[i].offset = 1; }
+	f.messages[nb_msg - 1].offset = 0;
 
 	MESSAGE *msg = malloc(sizeof(MESSAGE));
 	size_t taille = sizeof(nom);
@@ -86,8 +91,11 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	memcpy(msg->name, nom, taille);
 	msg->flag = options;
 	msg->shared_memory = malloc(sizeof(f));
+	*/
+	//if( ftruncate(fd, sizeof(line)) == -1){perror("ftruncate"); exit(1);}
 
-	if( ftruncate( fd, sizeof(line)) == -1){perror("ftruncate"); exit(1);}
+	size_t memory_size = sizeof(header) + nb_msg * len_max * sizeof(char);
+	if( ftruncate(fd, memory_size) == -1 ){perror("ftruncate"); exit(1);}
 	struct stat bufStat;
 	fstat(fd, &bufStat);
 
@@ -98,7 +106,7 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	int opt_excl = 0;
 	int opt_creat = 0;
 	*/
-
+	/*
 	int prot = 0;
 
 	int options_i=0;
@@ -126,15 +134,42 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 			//opt_creat = 1;
 		}
 	}
-
 	line *addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0) ;
+	*/
+
+
+	line *addr = mmap(NULL, bufStat.st_size, mode, MAP_SHARED, fd, 0);
+	if( (void*) addr == MAP_FAILED) {
+		perror("Function mmap()");
+		exit(EXIT_FAILURE);
+	}
+
+
+	MESSAGE *msg = malloc(sizeof(MESSAGE));
+	size_t taille = sizeof(nom);
+	assert(taille<TAILLE_NOM);
+	memcpy(msg->name, nom, taille);
+	msg->flag = options;
+	msg->shared_memory = (line*) addr;
+
+	msg->shared_memory->head.max_length_message = len_max;
+	msg->shared_memory->head.pipe_capacity = nb_msg;
+	msg->shared_memory->head.first_occupied = -1;
+	msg->shared_memory->head.last_occupied = -1;
+	msg->shared_memory->head.first_free = 0;
+	msg->shared_memory->head.last_free = nb_msg - 1;
+
+	for(int i = 0; i < nb_msg - 1; i++){ msg->shared_memory->messages[i].offset = 1; }
+	msg->shared_memory->messages[nb_msg - 1].offset = 0;
 
 	if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
 	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
 	if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
 
+	/*
 	msg->shared_memory = addr;
 	initialise_taille_max(msg,nb_msg,len_max);
+	*/
 
 	return msg;
 }

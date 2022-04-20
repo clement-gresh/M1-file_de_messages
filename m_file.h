@@ -13,6 +13,7 @@
 #include <pthread.h>
 #include <sys/mman.h>
 #include <assert.h>
+#include <stddef.h>
 
 #define UNLOCK true
 #define NO_UNLOCK false
@@ -25,8 +26,8 @@
 typedef struct mon_message{
 	long type;
 	ssize_t length;
-	int offset;
-	char mtext[TAILLE_MAX_MESSAGE];
+	ptrdiff_t offset;
+	char mtext[];
 } mon_message;
 
 typedef struct header{
@@ -43,8 +44,10 @@ typedef struct header{
 
 typedef struct line{
 	struct header head;
-	mon_message messages[NOMBRE_MAX_MESSAGE];
+	mon_message messages[];
 } line;
+
+// mmap : sizeof taille du header + sizeof nbr cases tableau * taile d'une case du tableau
 
 typedef struct MESSAGE{
 	char name[TAILLE_NOM]; // on le met dans le doute
