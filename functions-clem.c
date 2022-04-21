@@ -91,22 +91,18 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal wcond"); exit(-1);}
 
 	// Ecrit le message dans la memoire partagee
-	memcpy(((mon_message *)file->shared_memory->messages)[current].mtext, msg, len);
+	printf("type envoye : %ld \n", ((mon_message *)msg)->type);//debug
+	memcpy(&((mon_message *)file->shared_memory->messages)[current], (mon_message *)msg, sizeof(mon_message) + len);
+	((mon_message *)file->shared_memory->messages)[current].type = ((mon_message *)msg)->length = len;
 
 	// DEBUG
-	printf("La valeur du type est %ld.\n",
-			((mon_message *)file->shared_memory->messages)[file->shared_memory->head.first_free].type);
-	printf("Le msg est %s.\n",
-			((mon_message *)file->shared_memory->messages)[file->shared_memory->head.first_free].mtext);
+	printf("La valeur du type est %ld.\n", ((mon_message *)file->shared_memory->messages)[current].type);
+	printf("Le msg est %s.\n", ((mon_message *)file->shared_memory->messages)[current].mtext);
+	printf("La longueur du msg est %ld.\n", ((mon_message *)file->shared_memory->messages)[current].length);
 	// FIN DEBUG
 
-	/*
 	// Synchronise la memoire
-	if(msync(file, sizeof(file->memory_size), MS_SYNC) == -1) {
-		perror("Function msync()");
-		exit(-1);
-	}
-	*/
+	if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) {perror("m_envoi() -> msync()"); exit(-1);}
 
 	// Signale un processus attendant de pouvoir recevoir
 	if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
@@ -208,10 +204,10 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 
 
 	// Copie et "suppression" du message
-	memcpy(msg, ((mon_message *)file->shared_memory->messages)[current].mtext, msg_size);
+	memcpy((mon_message *)msg, &((mon_message *)file->shared_memory->messages)[current], sizeof(mon_message) + msg_size);
 
 	// Synchronise la memoire
-	//if(msync(file, sizeof(file->memory_size), MS_SYNC) == -1) {perror("Function msync()"); exit(-1);}
+	if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) {perror("Function msync()"); exit(-1);}
 
 	// Unlock le mutex
 	if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }

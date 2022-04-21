@@ -18,8 +18,6 @@
 #define UNLOCK true
 #define NO_UNLOCK false
 
-#define TAILLE_MAX_MESSAGE 1024
-#define NOMBRE_MAX_MESSAGE 256
 #define TAILLE_NOM 16
 
 // STRUCTURES

@@ -27,3 +27,5 @@ clean :
 
 test: all
 	./project-tests
+
+launch : clean all test
