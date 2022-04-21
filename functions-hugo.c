@@ -163,7 +163,11 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	msg->shared_memory->head.first_occupied = -1;
 	msg->shared_memory->head.last_occupied = -1;
 	msg->shared_memory->head.first_free = 0;
-	msg->shared_memory->head.last_free = nb_msg - 1;
+	msg->shared_memory->head.last_free = 0;
+
+	// La place disponible pour un message
+	((mon_message*)msg->shared_memory->messages)[0].length = msg->memory_size;
+	((mon_message*)msg->shared_memory->messages)[0].offset = 0;
 
 	if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
 	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }

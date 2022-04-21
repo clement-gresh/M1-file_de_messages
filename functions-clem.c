@@ -45,6 +45,30 @@ int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	return 0;
 }
 
+int enough_space(MESSAGE *file, size_t len){
+	int count = 0;
+	int current = file->shared_memory->head.first_free;
+
+	if(current == -1){ return -1; }
+
+	while(true){
+		// Retourne current si la case a la place pour le message
+		if(((mon_message *)file->shared_memory->messages)[current].length >= sizeof(mon_message) + len){
+			return current;
+		}
+		// Sinon passe a la case libre suivante s'il y en a une
+		else if(current != file->shared_memory->head.last_free){
+			current = current + ((mon_message *)file->shared_memory->messages)[current].offset;
+		}
+		// Sinon aligne tous les messages a gauche (si ca n'a pas deja ete fait)
+		else if(count == 0){
+			//debug : fct_met_tout_a_gauche
+			count = count + 1;
+		}
+		else { return -1; }
+	}
+}
+
 int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	// Traitement des erreurs
 	if(m_envoi_erreurs(file, msg, len, msgflag) < 0){ exit(-1); }
@@ -53,18 +77,51 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(pthread_mutex_lock(&file->shared_memory->head.mutex) != 0){ perror("lock mutex"); exit(-1); }
 
 	// Attente si tableau plein (sauf si O_NONBLOCK)
-	while((file->shared_memory->head.first_occupied == file->shared_memory->head.first_free)){
+	int current;
+
+	while((current = enough_space(file, len)) == -1){
 		if(msgflag == O_NONBLOCK) {
-			if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
-			if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
-			printf("Le tableau est plein (envoi en mode non bloquant).\n");
-			errno = EAGAIN;
-			exit(-1);
+			my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'b', EAGAIN);
 		}
 		if(pthread_cond_wait(&file->shared_memory->head.wcond, &file->shared_memory->head.mutex) > 0) {
 			perror("wait wcond"); exit(-1);
 		}
 	}
+
+	int free_space = ((mon_message *)file->shared_memory->messages)[current].length - sizeof(mon_message) - len;
+	int first_free = file->shared_memory->head.first_free;
+	int offset_free = ((mon_message *)file->shared_memory->messages)[current].offset;
+
+	// Si la case libre choisie est la premiere de la LC
+	if(current == first_free){
+		// S'il y a assez de place pour stocker le message a envoyer et un autre message
+		if(free_space > sizeof(mon_message)){
+			file->shared_memory->head.first_free += sizeof(mon_message) + len;
+			((mon_message *)file->shared_memory->messages)[first_free].length -= sizeof(mon_message) + len;
+
+			if(offset_free != 0){
+				((mon_message *)file->shared_memory->messages)[first_free].offset -= sizeof(mon_message) + len ;
+			}
+		}
+		// Sinon s'il y a une autre case libre dans la LC
+		else if(offset_free != 0){
+			file->shared_memory->head.first_free = first_free + offset_free;
+		}
+		// Sinon (s'il n'y a plus de cases libres)
+		else{
+			file->shared_memory->head.first_free = -1;
+			file->shared_memory->head.last_free = -1;
+		}
+	}
+	else{
+		int prev = file->shared_memory->head.first_free;
+
+		while(prev + ((mon_message *)file->shared_memory->messages)[prev].offset != cell){
+			prev = prev + ((mon_message *)file->shared_memory->messages)[prev].offset;
+		}
+	}
+
+
 
 	// Met a jour 'first_free', 'first_occupied' et 'last_occupied'
 	int current = file->shared_memory->head.first_free;
@@ -111,6 +168,10 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 }
 
 
+
+// Quand on supprime un message et qu'on ajoute une case a la LC des cases vides, on peut verifier si
+// offset = length pour une case ou offset = - length pour l'autre case. Ca veut alors dire qu'elles sont
+// concomitente et qu'on peut donc faire une seule grande case
 
 ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	if(file->flag == O_WRONLY){

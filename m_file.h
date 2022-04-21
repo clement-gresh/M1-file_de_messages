@@ -23,7 +23,8 @@
 // STRUCTURES
 typedef struct mon_message{
 	long type;
-	ssize_t length;
+	size_t length;
+	ptrdiff_t offset;
 	char mtext[];
 } mon_message;
 
