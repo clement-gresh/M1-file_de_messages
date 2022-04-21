@@ -141,7 +141,7 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	size_t taille = sizeof(nom); // debug : est ce que le champ nom est utile ?
 	assert(taille<TAILLE_NOM);
 	memcpy(msg->name, nom, taille);
-	msg->memory_size = sizeof(header) + nb_msg * len_max * sizeof(char);
+	msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
 
 	int fd = shm_open(nom, options, mode);
 	if( fd == -1 ){ perror("shm_open"); exit(1);}
@@ -164,11 +164,6 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	msg->shared_memory->head.last_occupied = -1;
 	msg->shared_memory->head.first_free = 0;
 	msg->shared_memory->head.last_free = nb_msg - 1;
-
-	for(int i = 0; i < nb_msg - 1; i++){
-		((mon_message *)msg->shared_memory->messages)[i].offset = 1;
-	}
-	((mon_message *)msg->shared_memory->messages)[nb_msg - 1].offset = 0;
 
 	if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
 	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }

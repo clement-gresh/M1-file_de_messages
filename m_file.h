@@ -24,7 +24,6 @@
 typedef struct mon_message{
 	long type;
 	ssize_t length;
-	ptrdiff_t offset;
 	char mtext[];
 } mon_message;
 
@@ -44,8 +43,6 @@ typedef struct line{
 	struct header head;
 	char messages[];
 } line;
-
-// mmap : sizeof taille du header + sizeof nbr cases tableau * taile d'une case du tableau
 
 typedef struct MESSAGE{
 	char name[TAILLE_NOM]; // on le met dans le doute
