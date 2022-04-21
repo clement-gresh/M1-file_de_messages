@@ -48,68 +48,16 @@ typedef struct MESSAGE{
 } MESSAGE;
 */
 
-/*
+
 // Renvoie le bit numero i d'un int
 int BitAt(long unsigned int x, int i){
 	assert(0 <= i && i < 32);
 	return (x >> i) & 1;
 }
 
-void initialise_taille_max(MESSAGE *msg, int nb_msg, int len_max){
-	assert(nb_msg < NOMBRE_MAX_MESSAGE);
-	assert(len_max < TAILLE_MAX_MESSAGE);
-
-	msg->shared_memory->head.max_length_message = len_max;
-	msg->shared_memory->head.pipe_capacity = nb_msg;
-}
-*/
-
-// nom doit commencer par un unique /
-MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
-	// ne verifie pas le partage de memoire Anonyme
-	/*
-	int fd = shm_open(nom, options, mode);
-	if( fd == -1 ){ perror("shm_open"); exit(1);}
-
-
-	header h;
-	h.max_length_message = len_max;
-	h.pipe_capacity = nb_msg;
-	h.first_occupied = -1;
-	h.last_occupied = -1;
-	h.first_free = 0;
-	h.last_free = h.pipe_capacity - 1;
-
-	line f;
-	f.head = h;
-	for(int i = 0; i < nb_msg - 1; i++){ f.messages[i].offset = 1; }
-	f.messages[nb_msg - 1].offset = 0;
-
-	MESSAGE *msg = malloc(sizeof(MESSAGE));
-	size_t taille = sizeof(nom);
-	assert(taille<TAILLE_NOM);
-	memcpy(msg->name, nom, taille);
-	msg->flag = options;
-	msg->shared_memory = malloc(sizeof(f));
-
-	//if( ftruncate(fd, sizeof(line)) == -1){perror("ftruncate"); exit(1);}
-
-	size_t memory_size = sizeof(header) + nb_msg * len_max * sizeof(char);
-	if( ftruncate(fd, memory_size) == -1 ){perror("ftruncate"); exit(1);}
-	struct stat bufStat;
-	fstat(fd, &bufStat);
-
-
-	int opt_rd = 0;
-	int opt_wr = 0;
-	int opt_rdwr = 0;
-	int opt_excl = 0;
-	int opt_creat = 0;
-	*/
-	/*
-	int prot = 0;
-
+int build_prot(int options){
 	int options_i=0;
+	int prot = 0;
 	size_t len_int = sizeof(int);
 
 	for(int i=0;i<len_int;i++){
@@ -134,30 +82,56 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 			//opt_creat = 1;
 		}
 	}
-	line *addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0) ;
-	*/
+
+	return prot;
+}
+
+int is_o_creat(int options){
+	int options_i=0;
+	size_t len_int = sizeof(int);
+
+	for(int i=0;i<len_int;i++){
+		if((options_i==BitAt(O_CREAT,i))==1){
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int private_or_shared(const char *nom){
+	if(nom==NULL){
+		return MAP_PRIVATE;
+	}
+	return MAP_SHARED;
+}
+
+/*MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
+	// ne verifie pas le partage de memoire Anonyme
 
 	MESSAGE *msg = malloc(sizeof(MESSAGE));
-	size_t taille = sizeof(nom); // debug : est ce que le champ nom est utile ?
-	assert(taille<TAILLE_NOM);
-	memcpy(msg->name, nom, taille);
-	msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
+
+	size_t len_name = sizeof(nom); // debug : est ce que le champ nom est utile ?
+	assert(len_name<LEN_NAME);
 
 	int fd = shm_open(nom, options, mode);
 	if( fd == -1 ){ perror("shm_open"); exit(1);}
-
 	if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
 	struct stat bufStat;
 	fstat(fd, &bufStat);
 
-	line *addr = mmap(NULL, bufStat.st_size, mode, MAP_SHARED, fd, 0);
+	int prot = build_prot(options);
+	int map_flag = private_or_shared(nom);
+	line *addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
 	if( (void*) addr == MAP_FAILED) {
 		perror("Function mmap()");
 		exit(EXIT_FAILURE);
 	}
 
+	memcpy(msg->name, nom, len_name);
+	msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
 	msg->flag = options;
 	msg->shared_memory = addr;
+
 	msg->shared_memory->head.max_length_message = len_max;
 	msg->shared_memory->head.pipe_capacity = nb_msg;
 	msg->shared_memory->head.first_occupied = -1;
@@ -169,13 +143,94 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
 	if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
 
-	/*
-	msg->shared_memory = addr;
-	initialise_taille_max(msg,nb_msg,len_max);
-	*/
+	return msg;
+}*/
+
+// nom doit commencer par un unique /
+//size_t nb_msg, size_t len_max, mode_t mode
+MESSAGE *m_connexion(const char *nom, int options, ...){
+
+	MESSAGE *msg = malloc(sizeof(MESSAGE));
+
+	size_t len_name = sizeof(nom); // debug : est ce que le champ nom est utile ?
+	assert(len_name<LEN_NAME);
+
+	line *addr = NULL;
+
+    if(is_o_creat(options)){ //il faut le créer s'il n'existe pas
+    	va_list parametersInfos;
+    	va_start(parametersInfos, options);
+
+    	size_t nb_msg = va_arg(parametersInfos, size_t);
+    	size_t len_max = va_arg(parametersInfos, size_t);
+    	mode_t mode = va_arg(parametersInfos, mode_t);
+
+    	memcpy(msg->name, nom, len_name);
+		msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
+		msg->flag = options;
+
+		int fd = shm_open(nom, options, mode);
+		if( fd == -1 ){ perror("shm_open"); exit(1);}
+		if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
+		struct stat bufStat;
+		fstat(fd, &bufStat);
+		printf("ici _n\n");
+		int prot = build_prot(options);
+		int map_flag = private_or_shared(nom);
+		addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
+		if( (void*) addr == MAP_FAILED) {
+			perror("Function mmap()");
+			exit(EXIT_FAILURE);
+		}
+	
+		msg->shared_memory = addr;
+		msg->shared_memory->head.max_length_message = len_max;
+		msg->shared_memory->head.pipe_capacity = nb_msg;
+		msg->shared_memory->head.first_occupied = -1;
+		msg->shared_memory->head.last_occupied = -1;
+		msg->shared_memory->head.first_free = 0;
+		msg->shared_memory->head.last_free = nb_msg - 1;
+
+		va_end(parametersInfos);
+
+    }
+    else if(!is_o_creat(options) && nom!=NULL){ // il existe
+    	MESSAGE *msg = malloc(sizeof(MESSAGE));
+
+		size_t len_name = sizeof(nom); // debug : est ce que le champ nom est utile ?
+		assert(len_name<LEN_NAME);
+
+		int fd = shm_open(nom, options, 0);
+		if( fd == -1 ){ perror("shm_open"); exit(1);}
+		if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
+		struct stat bufStat;
+		fstat(fd, &bufStat);
+
+		int prot = build_prot(options);
+		addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0);
+		if( (void*) addr == MAP_FAILED) {
+			perror("Function mmap()");
+			exit(EXIT_FAILURE);
+		}
+
+		memcpy(msg->name, nom, len_name);
+		msg->memory_size = sizeof(addr->head) + addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
+		msg->flag = options;
+		msg->shared_memory = addr;
+
+    }
+    else{
+    	return NULL;
+    }
+
+	if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
+	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
+	if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
 
 	return msg;
+
 }
+
 
 int m_deconnexion(MESSAGE *file){
 	file->shared_memory = NULL;
