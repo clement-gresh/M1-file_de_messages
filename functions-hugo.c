@@ -67,11 +67,11 @@ void initialise_taille_max(MESSAGE *msg, int nb_msg, int len_max){
 // nom doit commencer par un unique /
 MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
 	// ne verifie pas le partage de memoire Anonyme
-
+	/*
 	int fd = shm_open(nom, options, mode);
 	if( fd == -1 ){ perror("shm_open"); exit(1);}
 
-	/*
+
 	header h;
 	h.max_length_message = len_max;
 	h.pipe_capacity = nb_msg;
@@ -91,7 +91,7 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	memcpy(msg->name, nom, taille);
 	msg->flag = options;
 	msg->shared_memory = malloc(sizeof(f));
-	*/
+
 	//if( ftruncate(fd, sizeof(line)) == -1){perror("ftruncate"); exit(1);}
 
 	size_t memory_size = sizeof(header) + nb_msg * len_max * sizeof(char);
@@ -99,7 +99,7 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	struct stat bufStat;
 	fstat(fd, &bufStat);
 
-	/*
+
 	int opt_rd = 0;
 	int opt_wr = 0;
 	int opt_rdwr = 0;
@@ -137,6 +137,18 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	line *addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0) ;
 	*/
 
+	MESSAGE *msg = malloc(sizeof(MESSAGE));
+	size_t taille = sizeof(nom); // debug : est ce que le champ nom est utile ?
+	assert(taille<TAILLE_NOM);
+	memcpy(msg->name, nom, taille);
+	msg->memory_size = sizeof(header) + nb_msg * len_max * sizeof(char);
+
+	int fd = shm_open(nom, options, mode);
+	if( fd == -1 ){ perror("shm_open"); exit(1);}
+
+	if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
+	struct stat bufStat;
+	fstat(fd, &bufStat);
 
 	line *addr = mmap(NULL, bufStat.st_size, mode, MAP_SHARED, fd, 0);
 	if( (void*) addr == MAP_FAILED) {
@@ -144,14 +156,8 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 		exit(EXIT_FAILURE);
 	}
 
-
-	MESSAGE *msg = malloc(sizeof(MESSAGE));
-	size_t taille = sizeof(nom);
-	assert(taille<TAILLE_NOM);
-	memcpy(msg->name, nom, taille);
 	msg->flag = options;
-	msg->shared_memory = (line*) addr;
-
+	msg->shared_memory = addr;
 	msg->shared_memory->head.max_length_message = len_max;
 	msg->shared_memory->head.pipe_capacity = nb_msg;
 	msg->shared_memory->head.first_occupied = -1;
@@ -159,8 +165,10 @@ MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max
 	msg->shared_memory->head.first_free = 0;
 	msg->shared_memory->head.last_free = nb_msg - 1;
 
-	for(int i = 0; i < nb_msg - 1; i++){ msg->shared_memory->messages[i].offset = 1; }
-	msg->shared_memory->messages[nb_msg - 1].offset = 0;
+	for(int i = 0; i < nb_msg - 1; i++){
+		((mon_message *)msg->shared_memory->messages)[i].offset = 1;
+	}
+	((mon_message *)msg->shared_memory->messages)[nb_msg - 1].offset = 0;
 
 	if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
 	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }

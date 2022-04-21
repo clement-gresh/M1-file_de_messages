@@ -44,13 +44,14 @@ typedef struct header{
 
 typedef struct line{
 	struct header head;
-	mon_message messages[];
+	char messages[];
 } line;
 
 // mmap : sizeof taille du header + sizeof nbr cases tableau * taile d'une case du tableau
 
 typedef struct MESSAGE{
 	char name[TAILLE_NOM]; // on le met dans le doute
+	size_t memory_size;
 	int flag;
 	line* shared_memory;
 } MESSAGE;

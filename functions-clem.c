@@ -68,8 +68,8 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	// Met a jour 'first_free', 'first_occupied' et 'last_occupied'
 	int current = file->shared_memory->head.first_free;
-	int offset_free = file->shared_memory->messages[current].offset;
-	file->shared_memory->messages[current].offset = 0;
+	int offset_free = ((mon_message *)file->shared_memory->messages)[current].offset;
+	((mon_message *)file->shared_memory->messages)[current].offset = 0;
 
 	// Si le tableau est plein une fois l'envoi fait
 	if(offset_free == 0){ file->shared_memory->head.first_free = -1; }
@@ -79,7 +79,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(file->shared_memory->head.first_occupied == -1) { file->shared_memory->head.first_occupied = current; }
 	else{
 		int last_occupied = file->shared_memory->head.last_occupied;
-		file->shared_memory->messages[last_occupied].offset = last_occupied - current;
+		((mon_message *)file->shared_memory->messages)[last_occupied].offset = last_occupied - current;
 
 	}
 	file->shared_memory->head.last_occupied = current;
@@ -91,18 +91,22 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal wcond"); exit(-1);}
 
 	// Ecrit le message dans la memoire partagee
-	memcpy(file->shared_memory->messages[current].mtext, msg, len);
+	memcpy(((mon_message *)file->shared_memory->messages)[current].mtext, msg, len);
 
 	// DEBUG
-	printf("La valeur du type est %ld.\n", file->shared_memory->messages[file->shared_memory->head.first_free].type);
-	printf("Le msg est %s.\n", file->shared_memory->messages[file->shared_memory->head.first_free].mtext);
+	printf("La valeur du type est %ld.\n",
+			((mon_message *)file->shared_memory->messages)[file->shared_memory->head.first_free].type);
+	printf("Le msg est %s.\n",
+			((mon_message *)file->shared_memory->messages)[file->shared_memory->head.first_free].mtext);
 	// FIN DEBUG
 
+	/*
 	// Synchronise la memoire
-	if(msync(file, sizeof(MESSAGE), MS_SYNC) == -1) {
+	if(msync(file, sizeof(file->memory_size), MS_SYNC) == -1) {
 		perror("Function msync()");
 		exit(-1);
 	}
+	*/
 
 	// Signale un processus attendant de pouvoir recevoir
 	if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
@@ -135,14 +139,14 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		}
 		else if(type != 0 && current != -1){
 			while(true){
-				if((type>0 && file->shared_memory->messages[current].type == type)
-						|| (type<0 && file->shared_memory->messages[current].type <= -type)){
+				if((type>0 && ((mon_message *)file->shared_memory->messages)[current].type == type)
+						|| (type<0 && ((mon_message *)file->shared_memory->messages)[current].type <= -type)){
 					msg_to_read = true;
 					break;
 				}
 				else{
 					if(current == file->shared_memory->head.last_occupied) { break; }
-					current = current + file->shared_memory->messages[current].offset;
+					current = current + ((mon_message *)file->shared_memory->messages)[current].offset;
 				}
 			}
 		}
@@ -157,19 +161,19 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 			}
 		}
 	}
-	msg_size = file->shared_memory->messages[current].length;
+	msg_size = ((mon_message *)file->shared_memory->messages)[current].length;
 	if(msg_size > len){
 		return my_error("Memoire allouee trop petite pour recevoir le message.", file, UNLOCK, 'b', EMSGSIZE);
 	}
 	// MAJ de la liste chainee de cases occupee
 	int search = file->shared_memory->head.first_occupied;
-	int current_offset = file->shared_memory->messages[current].offset;
-	int search_offset = file->shared_memory->messages[search].offset;
+	int current_offset = ((mon_message *)file->shared_memory->messages)[current].offset;
+	int search_offset = ((mon_message *)file->shared_memory->messages)[search].offset;
 
 		// Si current est la premiere case de la LC
 	if(current == search){
 			// Si current est aussi la derniere case de la LC
-		if(file->shared_memory->messages[current].offset == 0){
+		if(((mon_message *)file->shared_memory->messages)[current].offset == 0){
 			file->shared_memory->head.first_occupied = -1;
 			file->shared_memory->head.last_occupied = -1;
 		}
@@ -183,31 +187,31 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 			if(search + search_offset == current){
 				// Si current est la derniere case de la LC
 				if(current_offset == 0) {
-					file->shared_memory->messages[search].offset = 0;
+					((mon_message *)file->shared_memory->messages)[search].offset = 0;
 					file->shared_memory->head.last_occupied = search;
 				}
 				else{
-					file->shared_memory->messages[search].offset = search_offset + current_offset;
+					((mon_message *)file->shared_memory->messages)[search].offset = search_offset + current_offset;
 				}
 			}
 			search = search + search_offset;
-			search_offset = file->shared_memory->messages[search].offset;
+			search_offset = ((mon_message *)file->shared_memory->messages)[search].offset;
 		}
 	}
 	// MAJ de la liste chainee de cases vides
 	int last_free = file->shared_memory->head.last_free;
 
 	if(last_free == -1) { file->shared_memory->head.first_free = current; }
-	else{ file->shared_memory->messages[last_free].offset = last_free - current; }
+	else{ ((mon_message *)file->shared_memory->messages)[last_free].offset = last_free - current; }
 	file->shared_memory->head.last_free = current;
-	file->shared_memory->messages[current].offset = 0;
+	((mon_message *)file->shared_memory->messages)[current].offset = 0;
 
 
 	// Copie et "suppression" du message
-	memcpy(msg, file->shared_memory->messages[current].mtext, msg_size);
+	memcpy(msg, ((mon_message *)file->shared_memory->messages)[current].mtext, msg_size);
 
 	// Synchronise la memoire
-	if(msync(file, sizeof(MESSAGE), MS_SYNC) == -1) {perror("Function msync()"); exit(-1);}
+	//if(msync(file, sizeof(file->memory_size), MS_SYNC) == -1) {perror("Function msync()"); exit(-1);}
 
 	// Unlock le mutex
 	if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
