@@ -94,7 +94,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	// Si la case libre choisie est la premiere de la LC
 	if(current == first_free){
-		// S'il y a assez de place pour stocker le message a envoyer et un autre message
+		// S'il y a assez de place pour stocker ce message plus un autre
 		if(free_space > sizeof(mon_message)){
 			file->shared_memory->head.first_free += sizeof(mon_message) + len;
 			((mon_message *)file->shared_memory->messages)[first_free].length -= sizeof(mon_message) + len;
@@ -113,6 +113,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 			file->shared_memory->head.last_free = -1;
 		}
 	}
+	// Si la case libre choisie n'est pas la premiere de la LC
 	else{
 		int prev = file->shared_memory->head.first_free;
 

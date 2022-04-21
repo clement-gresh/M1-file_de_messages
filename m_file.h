@@ -14,11 +14,12 @@
 #include <sys/mman.h>
 #include <assert.h>
 #include <stddef.h>
+#include <stdarg.h> // pour avoir le nombre d'arguments qui varie dans une même fonction 
 
 #define UNLOCK true
 #define NO_UNLOCK false
 
-#define TAILLE_NOM 16
+#define LEN_NAME 32
 
 // STRUCTURES
 typedef struct mon_message{
@@ -46,7 +47,7 @@ typedef struct line{
 } line;
 
 typedef struct MESSAGE{
-	char name[TAILLE_NOM]; // on le met dans le doute
+	char name[LEN_NAME]; // on le met dans le doute
 	size_t memory_size;
 	int flag;
 	line* shared_memory;
@@ -54,7 +55,7 @@ typedef struct MESSAGE{
 
 
 // PROJECT FUNCTIONS
-MESSAGE *m_connexion( const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode );
+MESSAGE *m_connexion( const char *nom, int options, ...);
 int m_deconnexion(MESSAGE *file);
 int m_destruction(const char *nom);
 
