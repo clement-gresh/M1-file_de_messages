@@ -90,22 +90,29 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	int free_space = ((mon_message *)file->shared_memory->messages)[current].length - sizeof(mon_message) - len;
 	int first_free = file->shared_memory->head.first_free;
-	int offset_free = ((mon_message *)file->shared_memory->messages)[current].offset;
+	int offset_current = ((mon_message *)file->shared_memory->messages)[current].offset;
+	int length_free = ((mon_message *)file->shared_memory->messages)[first_free].length;
 
 	// Si la case libre choisie est la premiere de la LC
 	if(current == first_free){
 		// S'il y a assez de place pour stocker ce message plus un autre
 		if(free_space > sizeof(mon_message)){
 			file->shared_memory->head.first_free += sizeof(mon_message) + len;
-			((mon_message *)file->shared_memory->messages)[first_free].length -= sizeof(mon_message) + len;
 
-			if(offset_free != 0){
-				((mon_message *)file->shared_memory->messages)[first_free].offset -= sizeof(mon_message) + len ;
+			((mon_message *)file->shared_memory->messages)[first_free].length =
+					length_free - sizeof(mon_message) - len;
+
+			if(offset_current != 0){
+				((mon_message *)file->shared_memory->messages)[first_free].offset
+						= offset_current - sizeof(mon_message) - len ;
+			}
+			else{
+				((mon_message *)file->shared_memory->messages)[first_free].offset = 0;
 			}
 		}
 		// Sinon s'il y a une autre case libre dans la LC
-		else if(offset_free != 0){
-			file->shared_memory->head.first_free = first_free + offset_free;
+		else if(offset_current != 0){
+			file->shared_memory->head.first_free = first_free + offset_current;
 		}
 		// Sinon (s'il n'y a plus de cases libres)
 		else{
@@ -117,21 +124,54 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	else{
 		int prev = file->shared_memory->head.first_free;
 
-		while(prev + ((mon_message *)file->shared_memory->messages)[prev].offset != cell){
+		while(prev + ((mon_message *)file->shared_memory->messages)[prev].offset != current){
 			prev = prev + ((mon_message *)file->shared_memory->messages)[prev].offset;
 		}
+
+		// S'il y a assez de place pour stocker ce message plus un autre
+		if(free_space > sizeof(mon_message)){
+			int next = current + sizeof(mon_message) + len;
+
+			((mon_message *)file->shared_memory->messages)[prev].offset += sizeof(mon_message) + len;
+
+			((mon_message *)file->shared_memory->messages)[next].length =
+					length_free - sizeof(mon_message) - len;
+
+			if(offset_current != 0){
+				((mon_message *)file->shared_memory->messages)[next].offset
+						= offset_current - sizeof(mon_message) - len ;
+			}
+			else{
+				((mon_message *)file->shared_memory->messages)[next].offset = 0;
+			}
+		}
+		// Sinon s'il y a une autre case libre dans la LC
+		else if(offset_current != 0){
+			((mon_message *)file->shared_memory->messages)[prev].offset += offset_current;
+		}
+		// Sinon (s'il n'y a plus de cases libres)
+		else{
+			((mon_message *)file->shared_memory->messages)[prev].offset = 0;
+			file->shared_memory->head.last_free = prev;
+		}
+
+
+
+		if(offset_current == 0){ ((mon_message *)file->shared_memory->messages)[prev].offset = 0; }
+		else{ ((mon_message *)file->shared_memory->messages)[prev].offset += offset_current; }
+
 	}
 
 
 
 	// Met a jour 'first_free', 'first_occupied' et 'last_occupied'
 	int current = file->shared_memory->head.first_free;
-	int offset_free = ((mon_message *)file->shared_memory->messages)[current].offset;
+	int offset_current = ((mon_message *)file->shared_memory->messages)[current].offset;
 	((mon_message *)file->shared_memory->messages)[current].offset = 0;
 
 	// Si le tableau est plein une fois l'envoi fait
-	if(offset_free == 0){ file->shared_memory->head.first_free = -1; }
-	else{ file->shared_memory->head.first_free = current + offset_free; }
+	if(offset_current == 0){ file->shared_memory->head.first_free = -1; }
+	else{ file->shared_memory->head.first_free = current + offset_current; }
 
 	// Si le tableau etait vide avant l'envoi
 	if(file->shared_memory->head.first_occupied == -1) { file->shared_memory->head.first_occupied = current; }
