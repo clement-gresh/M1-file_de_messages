@@ -46,6 +46,7 @@ int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 }
 
 int enough_space(MESSAGE *file, size_t len){
+	mon_message *messages = (mon_message *)file->shared_memory->messages;
 	int count = 0;
 	int current = file->shared_memory->head.first_free;
 
@@ -53,12 +54,12 @@ int enough_space(MESSAGE *file, size_t len){
 
 	while(true){
 		// Retourne current si la case a la place pour le message
-		if(((mon_message *)file->shared_memory->messages)[current].length >= sizeof(mon_message) + len){
+		if(messages[current].length >= sizeof(mon_message) + len){
 			return current;
 		}
 		// Sinon passe a la case libre suivante s'il y en a une
 		else if(current != file->shared_memory->head.last_free){
-			current = current + ((mon_message *)file->shared_memory->messages)[current].offset;
+			current = current + messages[current].offset;
 		}
 		// Sinon aligne tous les messages a gauche (si ca n'a pas deja ete fait)
 		else if(count == 0){
@@ -89,35 +90,32 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	}
 
 	// MAJ DE LA LISTE CHAINEE DES CASES LIBRES
+	mon_message *messages = (mon_message *)file->shared_memory->messages;
 	int prev = file->shared_memory->head.first_free;
 
 	if(prev != current){
-		while(prev + ((mon_message *)file->shared_memory->messages)[prev].offset != current){
-			prev = prev + ((mon_message *)file->shared_memory->messages)[prev].offset;
+		while(prev + messages[prev].offset != current){
+			prev = prev + messages[prev].offset;
 		}
 	}
 
-	int free_space = ((mon_message *)file->shared_memory->messages)[current].length - sizeof(mon_message) - len;
-	int current_offset = ((mon_message *)file->shared_memory->messages)[current].offset;
-	int current_length = ((mon_message *)file->shared_memory->messages)[current].length;
+	int free_space = messages[current].length - sizeof(mon_message) - len;
+	int current_offset = messages[current].offset;
+	int current_length = messages[current].length;
 	int msg_size = sizeof(mon_message) + len;
 
 	// S'il y a assez de place pour stocker ce message plus un autre
 	if(free_space > sizeof(mon_message)){
 		// MAJ de prev
 		if(prev == current){ file->shared_memory->head.first_free += msg_size; }
-		else{ ((mon_message *)file->shared_memory->messages)[prev].offset += msg_size; }
+		else{ messages[prev].offset += msg_size; }
 
 		// "Creation" de next
 		int next = current + msg_size;
-		((mon_message *)file->shared_memory->messages)[next].length = current_length - msg_size;
+		messages[next].length = current_length - msg_size;
 
-		if(current_offset != 0){
-			((mon_message *)file->shared_memory->messages)[next].offset = current_offset - msg_size;
-		}
-		else{
-			((mon_message *)file->shared_memory->messages)[next].offset = 0;
-		}
+		if(current_offset != 0){ messages[next].offset = current_offset - msg_size; }
+		else{ messages[next].offset = 0; }
 	}
 	// Sinon si current est la premiere case de la LC
 	else if(prev == current){
@@ -134,26 +132,26 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	else{
 		// S'il y a une autre case libre dans la LC
 		if(current_offset != 0){
-			((mon_message *)file->shared_memory->messages)[prev].offset += current_offset;
+			messages[prev].offset += current_offset;
 		}
 		else{
-			((mon_message *)file->shared_memory->messages)[prev].offset = 0;
+			messages[prev].offset = 0;
 			file->shared_memory->head.last_free = prev;
 		}
 
-		if(current_offset == 0){ ((mon_message *)file->shared_memory->messages)[prev].offset = 0; }
-		else{ ((mon_message *)file->shared_memory->messages)[prev].offset += current_offset; }
+		if(current_offset == 0){ messages[prev].offset = 0; }
+		else{ messages[prev].offset += current_offset; }
 	}
 
 
 	// MAJ DE LA LISTE CHAINEE DES CASES OCCUPEES
 
-
+	/*
 
 	// Met a jour 'first_free', 'first_occupied' et 'last_occupied'
 	int current = file->shared_memory->head.first_free;
-	int current_offset = ((mon_message *)file->shared_memory->messages)[current].offset;
-	((mon_message *)file->shared_memory->messages)[current].offset = 0;
+	int current_offset = messages[current].offset;
+	messages[current].offset = 0;
 
 	// Si le tableau est plein une fois l'envoi fait
 	if(current_offset == 0){ file->shared_memory->head.first_free = -1; }
@@ -163,7 +161,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(file->shared_memory->head.first_occupied == -1) { file->shared_memory->head.first_occupied = current; }
 	else{
 		int last_occupied = file->shared_memory->head.last_occupied;
-		((mon_message *)file->shared_memory->messages)[last_occupied].offset = last_occupied - current;
+		messages[last_occupied].offset = last_occupied - current;
 
 	}
 	file->shared_memory->head.last_occupied = current;
@@ -176,13 +174,13 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	// Ecrit le message dans la memoire partagee
 	printf("type envoye : %ld \n", ((mon_message *)msg)->type);//debug
-	memcpy(&((mon_message *)file->shared_memory->messages)[current], (mon_message *)msg, sizeof(mon_message) + len);
-	((mon_message *)file->shared_memory->messages)[current].type = ((mon_message *)msg)->length = len;
+	memcpy(&messages[current], (mon_message *)msg, sizeof(mon_message) + len);
+	messages[current].type = ((mon_message *)msg)->length = len;
 
 	// DEBUG
-	printf("La valeur du type est %ld.\n", ((mon_message *)file->shared_memory->messages)[current].type);
-	printf("Le msg est %s.\n", ((mon_message *)file->shared_memory->messages)[current].mtext);
-	printf("La longueur du msg est %ld.\n", ((mon_message *)file->shared_memory->messages)[current].length);
+	printf("La valeur du type est %ld.\n", messages[current].type);
+	printf("Le msg est %s.\n", messages[current].mtext);
+	printf("La longueur du msg est %ld.\n", messages[current].length);
 	// FIN DEBUG
 
 	// Synchronise la memoire
@@ -190,12 +188,12 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	// Signale un processus attendant de pouvoir recevoir
 	if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
-
+	*/
 	return 0;
 }
 
 
-
+/*
 // Quand on supprime un message et qu'on ajoute une case a la LC des cases vides, on peut verifier si
 // offset = length pour une case ou offset = - length pour l'autre case. Ca veut alors dire qu'elles sont
 // concomitente et qu'on peut donc faire une seule grande case
@@ -210,6 +208,8 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	// Lock du mutex
 	if(pthread_mutex_lock(&file->shared_memory->head.mutex) != 0){ perror("lock mutex"); exit(-1); }
 
+
+	mon_message *messages = (mon_message *)file->shared_memory->messages;
 	ssize_t msg_size;
 	int current;
 	bool msg_to_read = false;
@@ -223,14 +223,14 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		}
 		else if(type != 0 && current != -1){
 			while(true){
-				if((type>0 && ((mon_message *)file->shared_memory->messages)[current].type == type)
-						|| (type<0 && ((mon_message *)file->shared_memory->messages)[current].type <= -type)){
+				if((type>0 && messages[current].type == type)
+						|| (type<0 && messages[current].type <= -type)){
 					msg_to_read = true;
 					break;
 				}
 				else{
 					if(current == file->shared_memory->head.last_occupied) { break; }
-					current = current + ((mon_message *)file->shared_memory->messages)[current].offset;
+					current = current + messages[current].offset;
 				}
 			}
 		}
@@ -245,19 +245,19 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 			}
 		}
 	}
-	msg_size = ((mon_message *)file->shared_memory->messages)[current].length;
+	msg_size = messages[current].length;
 	if(msg_size > len){
 		return my_error("Memoire allouee trop petite pour recevoir le message.", file, UNLOCK, 'b', EMSGSIZE);
 	}
 	// MAJ de la liste chainee de cases occupee
 	int search = file->shared_memory->head.first_occupied;
-	int current_offset = ((mon_message *)file->shared_memory->messages)[current].offset;
-	int search_offset = ((mon_message *)file->shared_memory->messages)[search].offset;
+	int current_offset = messages[current].offset;
+	int search_offset = messages[search].offset;
 
 		// Si current est la premiere case de la LC
 	if(current == search){
 			// Si current est aussi la derniere case de la LC
-		if(((mon_message *)file->shared_memory->messages)[current].offset == 0){
+		if(messages[current].offset == 0){
 			file->shared_memory->head.first_occupied = -1;
 			file->shared_memory->head.last_occupied = -1;
 		}
@@ -271,28 +271,28 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 			if(search + search_offset == current){
 				// Si current est la derniere case de la LC
 				if(current_offset == 0) {
-					((mon_message *)file->shared_memory->messages)[search].offset = 0;
+					messages[search].offset = 0;
 					file->shared_memory->head.last_occupied = search;
 				}
 				else{
-					((mon_message *)file->shared_memory->messages)[search].offset = search_offset + current_offset;
+					messages[search].offset = search_offset + current_offset;
 				}
 			}
 			search = search + search_offset;
-			search_offset = ((mon_message *)file->shared_memory->messages)[search].offset;
+			search_offset = messages[search].offset;
 		}
 	}
 	// MAJ de la liste chainee de cases vides
 	int last_free = file->shared_memory->head.last_free;
 
 	if(last_free == -1) { file->shared_memory->head.first_free = current; }
-	else{ ((mon_message *)file->shared_memory->messages)[last_free].offset = last_free - current; }
+	else{ messages[last_free].offset = last_free - current; }
 	file->shared_memory->head.last_free = current;
-	((mon_message *)file->shared_memory->messages)[current].offset = 0;
+	messages[current].offset = 0;
 
 
 	// Copie et "suppression" du message
-	memcpy((mon_message *)msg, &((mon_message *)file->shared_memory->messages)[current], sizeof(mon_message) + msg_size);
+	memcpy((mon_message *)msg, &messages[current], sizeof(mon_message) + msg_size);
 
 	// Synchronise la memoire
 	if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) {perror("Function msync()"); exit(-1);}
@@ -306,3 +306,4 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 
 	return msg_size;
 }
+*/

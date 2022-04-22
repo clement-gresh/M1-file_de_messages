@@ -3,7 +3,7 @@
 // <>
 
 int main(int argc, const char * argv[]) {
-
+	/*
 	MESSAGE* file = m_connexion("/kangourou", O_RDWR | O_CREAT, 12, sizeof(char)*50, S_IRWXU | S_IRWXG | S_IRWXO);
 	//printf("%s\n", &file->name);
 
@@ -37,7 +37,7 @@ int main(int argc, const char * argv[]) {
 		printf("Le msg est %s.\n", m2->mtext);
 	}
 	else{ perror("erreur m_reception()"); exit(-1); }
-
+	*/
 
 	return EXIT_SUCCESS;
 }
