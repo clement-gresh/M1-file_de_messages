@@ -6,15 +6,16 @@
 // return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'n', EAGAIN);
 
 int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
+	struct header *head = &file->shared_memory->head;
 	perror(txt);
 	if(unlock){
-		if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
+		if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 	}
 	if(signal=='r' || signal == 'b'){
-		if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
+		if(pthread_cond_signal(&head->rcond) > 0){perror("signal rcond"); exit(-1);}
 	}
 	if(signal=='w' || signal == 'b'){
-		if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal wcond"); exit(-1);}
+		if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
 	}
 	if(error > 0) { errno = error; }
 	exit(-1);
@@ -22,12 +23,14 @@ int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
 
 // Debug : my_error a utiliser
 int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
+	struct header *head = &file->shared_memory->head;
+
 	if(file->flag == O_RDONLY){
 		printf("Impossible d'ecrire dans cette file.\n");
 		errno = EPERM;
 		exit(-1);
 	}
-	if(len > file->shared_memory->head.max_length_message){
+	if(len > head->max_length_message){
 		printf("La taille du message excede la taille maximale autorisee.\n");
 		errno = EMSGSIZE;
 		exit(-1);
@@ -37,7 +40,7 @@ int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		errno = EIO;
 		exit(-1);
 	}
-	if((file->shared_memory->head.first_free == -1) && (msgflag == O_NONBLOCK)){
+	if((head->first_free == -1) && (msgflag == O_NONBLOCK)){
 		printf("Le tableau est plein (envoi en mode non bloquant).\n");
 		errno = EAGAIN;
 		exit(-1);
@@ -47,8 +50,9 @@ int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 int enough_space(MESSAGE *file, size_t len){
 	mon_message *messages = (mon_message *)file->shared_memory->messages;
+	struct header *head = &file->shared_memory->head;
 	int count = 0;
-	int current = file->shared_memory->head.first_free;
+	int current = head->first_free;
 
 	if(current == -1){ return -1; }
 
@@ -58,7 +62,7 @@ int enough_space(MESSAGE *file, size_t len){
 			return current;
 		}
 		// Sinon passe a la case libre suivante s'il y en a une
-		else if(current != file->shared_memory->head.last_free){
+		else if(current != head->last_free){
 			current = current + messages[current].offset;
 		}
 		// Sinon aligne tous les messages a gauche (si ca n'a pas deja ete fait)
@@ -71,11 +75,14 @@ int enough_space(MESSAGE *file, size_t len){
 }
 
 int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
+	struct mon_message *messages = (mon_message *)file->shared_memory->messages;
+	struct header *head = &file->shared_memory->head;
+
 	// Traitement des erreurs
 	if(m_envoi_erreurs(file, msg, len, msgflag) < 0){ exit(-1); }
 
 	// Lock du mutex
-	if(pthread_mutex_lock(&file->shared_memory->head.mutex) != 0){ perror("lock mutex"); exit(-1); }
+	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
 
 	// Attente si tableau plein (sauf si O_NONBLOCK)
 	int current;
@@ -84,14 +91,13 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		if(msgflag == O_NONBLOCK) {
 			my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'b', EAGAIN);
 		}
-		if(pthread_cond_wait(&file->shared_memory->head.wcond, &file->shared_memory->head.mutex) > 0) {
+		if(pthread_cond_wait(&head->wcond, &head->mutex) > 0) {
 			perror("wait wcond"); exit(-1);
 		}
 	}
 
 	// MAJ DE LA LISTE CHAINEE DES CASES LIBRES
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
-	int prev = file->shared_memory->head.first_free;
+	int prev = head->first_free;
 
 	if(prev != current){
 		while(prev + messages[prev].offset != current){
@@ -104,10 +110,10 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	int current_length = messages[current].length;
 	int msg_size = sizeof(mon_message) + len;
 
-	// S'il y a assez de place pour stocker ce message plus un autre
+	// Si current a assez de place libre pour stocker ce message plus un autre
 	if(free_space > sizeof(mon_message)){
 		// MAJ de prev
-		if(prev == current){ file->shared_memory->head.first_free += msg_size; }
+		if(prev == current){ head->first_free += msg_size; }
 		else{ messages[prev].offset += msg_size; }
 
 		// "Creation" de next
@@ -121,22 +127,24 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	else if(prev == current){
 		// S'il y a une autre case libre dans la LC
 		if(current_offset != 0){
-			file->shared_memory->head.first_free = current + current_offset;
+			head->first_free = current + current_offset;
 		}
+		// Si current etait la seule case libre de la LC
 		else{
-			file->shared_memory->head.first_free = -1;
-			file->shared_memory->head.last_free = -1;
+			head->first_free = -1;
+			head->last_free = -1;
 		}
 	}
 	// Sinon (si current n'est pas la premiere case de la LC)
 	else{
-		// S'il y a une autre case libre dans la LC
+		// S'il y a une autre case libre apres current dans la LC
 		if(current_offset != 0){
 			messages[prev].offset += current_offset;
 		}
+		// Si current etait la derniere case libre de la LC
 		else{
 			messages[prev].offset = 0;
-			file->shared_memory->head.last_free = prev;
+			head->last_free = prev;
 		}
 
 		if(current_offset == 0){ messages[prev].offset = 0; }
@@ -145,50 +153,55 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 
 	// MAJ DE LA LISTE CHAINEE DES CASES OCCUPEES
+	//if()
 
 	/*
 
 	// Met a jour 'first_free', 'first_occupied' et 'last_occupied'
-	int current = file->shared_memory->head.first_free;
+	int current = head->first_free;
 	int current_offset = messages[current].offset;
 	messages[current].offset = 0;
 
 	// Si le tableau est plein une fois l'envoi fait
-	if(current_offset == 0){ file->shared_memory->head.first_free = -1; }
-	else{ file->shared_memory->head.first_free = current + current_offset; }
+	if(current_offset == 0){ head->first_free = -1; }
+	else{ head->first_free = current + current_offset; }
 
 	// Si le tableau etait vide avant l'envoi
-	if(file->shared_memory->head.first_occupied == -1) { file->shared_memory->head.first_occupied = current; }
+	if(head->first_occupied == -1) { head->first_occupied = current; }
 	else{
-		int last_occupied = file->shared_memory->head.last_occupied;
+		int last_occupied = head->last_occupied;
 		messages[last_occupied].offset = last_occupied - current;
 
 	}
-	file->shared_memory->head.last_occupied = current;
+	head->last_occupied = current;
+	*/
 
 	// Unlock le mutex
-	if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
+	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 
 	// Signale un processus attendant de pouvoir envoyer
-	if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal wcond"); exit(-1);}
+	if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
 
 	// Ecrit le message dans la memoire partagee
-	printf("type envoye : %ld \n", ((mon_message *)msg)->type);//debug
-	memcpy(&messages[current], (mon_message *)msg, sizeof(mon_message) + len);
+	printf("Type message envoye : %ld \n", ((mon_message *)msg)->type);//debug
+	memcpy(&messages[current], (mon_message *)msg, msg_size);
 	messages[current].type = ((mon_message *)msg)->length = len;
 
 	// DEBUG
-	printf("La valeur du type est %ld.\n", messages[current].type);
-	printf("Le msg est %s.\n", messages[current].mtext);
-	printf("La longueur du msg est %ld.\n", messages[current].length);
+	printf("Type : %ld.\n", messages[current].type);
+	printf("Length : %ld.\n", messages[current].length);
+	printf("Offset : %ld.\n", messages[current].offset);
+	printf("Message : %s.\n", messages[current].mtext);
 	// FIN DEBUG
 
 	// Synchronise la memoire
-	if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) {perror("m_envoi() -> msync()"); exit(-1);}
+	if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) {
+		perror("m_envoi() -> msync()"); exit(-1);
+	}
 
 	// Signale un processus attendant de pouvoir recevoir
-	if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
-	*/
+	if(pthread_cond_signal(&head->rcond) > 0){perror("signal rcond"); exit(-1);}
+
 	return 0;
 }
 
@@ -206,7 +219,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	}
 
 	// Lock du mutex
-	if(pthread_mutex_lock(&file->shared_memory->head.mutex) != 0){ perror("lock mutex"); exit(-1); }
+	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
 
 
 	mon_message *messages = (mon_message *)file->shared_memory->messages;
@@ -215,7 +228,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	bool msg_to_read = false;
 
 	while(!msg_to_read){
-		current = file->shared_memory->head.first_occupied;
+		current = head->first_occupied;
 
 		// Verifie s'il y a un message correspondant a 'type' dans la file
 		if(type==0 && current != -1){
@@ -229,7 +242,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 					break;
 				}
 				else{
-					if(current == file->shared_memory->head.last_occupied) { break; }
+					if(current == head->last_occupied) { break; }
 					current = current + messages[current].offset;
 				}
 			}
@@ -240,7 +253,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		}
 		// Attente si pas de message et mode bloquant
 		else if(!msg_to_read){
-			if(pthread_cond_wait(&file->shared_memory->head.rcond, &file->shared_memory->head.mutex) > 0) {
+			if(pthread_cond_wait(&head->rcond, &head->mutex) > 0) {
 				perror("wait wcond"); exit(-1);
 			}
 		}
@@ -250,7 +263,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		return my_error("Memoire allouee trop petite pour recevoir le message.", file, UNLOCK, 'b', EMSGSIZE);
 	}
 	// MAJ de la liste chainee de cases occupee
-	int search = file->shared_memory->head.first_occupied;
+	int search = head->first_occupied;
 	int current_offset = messages[current].offset;
 	int search_offset = messages[search].offset;
 
@@ -258,11 +271,11 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	if(current == search){
 			// Si current est aussi la derniere case de la LC
 		if(messages[current].offset == 0){
-			file->shared_memory->head.first_occupied = -1;
-			file->shared_memory->head.last_occupied = -1;
+			head->first_occupied = -1;
+			head->last_occupied = -1;
 		}
 		else{
-			file->shared_memory->head.first_occupied = current + current_offset;
+			head->first_occupied = current + current_offset;
 		}
 	}
 	else{
@@ -272,7 +285,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 				// Si current est la derniere case de la LC
 				if(current_offset == 0) {
 					messages[search].offset = 0;
-					file->shared_memory->head.last_occupied = search;
+					head->last_occupied = search;
 				}
 				else{
 					messages[search].offset = search_offset + current_offset;
@@ -283,11 +296,11 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		}
 	}
 	// MAJ de la liste chainee de cases vides
-	int last_free = file->shared_memory->head.last_free;
+	int last_free = head->last_free;
 
-	if(last_free == -1) { file->shared_memory->head.first_free = current; }
+	if(last_free == -1) { head->first_free = current; }
 	else{ messages[last_free].offset = last_free - current; }
-	file->shared_memory->head.last_free = current;
+	head->last_free = current;
 	messages[current].offset = 0;
 
 
@@ -298,11 +311,11 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) {perror("Function msync()"); exit(-1);}
 
 	// Unlock le mutex
-	if(pthread_mutex_unlock(&file->shared_memory->head.mutex) != 0){ perror("UNlock mutex"); exit(-1); }
+	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 
 	// Signale des processus attendant de pouvoir envoyer ou recevoir
-	if(pthread_cond_signal(&file->shared_memory->head.wcond) > 0){perror("signal wcond"); exit(-1);}
-	if(pthread_cond_signal(&file->shared_memory->head.rcond) > 0){perror("signal rcond"); exit(-1);}
+	if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
+	if(pthread_cond_signal(&head->rcond) > 0){perror("signal rcond"); exit(-1);}
 
 	return msg_size;
 }
