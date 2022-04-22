@@ -3,8 +3,6 @@
 // <>
 
 
-// return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'n', EAGAIN);
-
 int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
 	struct header *head = &file->shared_memory->head;
 	perror(txt);
@@ -18,7 +16,7 @@ int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
 		if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
 	}
 	if(error > 0) { errno = error; }
-	exit(-1);
+	return(-1);
 }
 
 // Debug : my_error a utiliser
@@ -90,7 +88,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	while((current = enough_space(file, len)) == -1){
 		if(msgflag == O_NONBLOCK) {
-			my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'b', EAGAIN);
+			return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'b', EAGAIN);
 		}
 		if(pthread_cond_wait(&head->wcond, &head->mutex) > 0) {
 			perror("wait wcond"); exit(-1);
@@ -113,18 +111,19 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	int current_length = messages[current].length;
 	size_t msg_size = sizeof(mon_message) + len;
 
+
 	// Si current a assez de place libre pour stocker ce message plus un autre
 	if(free_space > sizeof(mon_message)){
-		// MAJ de prev
-		if(prev == current){ head->first_free += msg_size; }
-		else{ messages[prev].offset += msg_size; }
-
 		// "Creation" de next
 		int next = current + msg_size;
 		messages[next].length = current_length - msg_size;
 
 		if(current_offset != 0){ messages[next].offset = current_offset - msg_size; }
 		else{ messages[next].offset = 0; }
+
+		// MAJ de prev
+		if(head->first_free == current){ head->first_free = next; }
+		else{ messages[prev].offset += msg_size; }
 	}
 
 	// Sinon si current est la premiere case de la LC
@@ -154,28 +153,13 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 
 	// MAJ DE LA LISTE CHAINEE DES CASES OCCUPEES
-	//if()
+	int first_occupied = head->first_occupied;
+	int last_occupied = head->last_occupied;
 
-	/*
+	if(first_occupied == -1){ head->first_occupied = current; }
+	else{ messages[last_occupied].offset = last_occupied - current; }
 
-	// Met a jour 'first_free', 'first_occupied' et 'last_occupied'
-	int current = head->first_free;
-	int current_offset = messages[current].offset;
-	messages[current].offset = 0;
-
-	// Si le tableau est plein une fois l'envoi fait
-	if(current_offset == 0){ head->first_free = -1; }
-	else{ head->first_free = current + current_offset; }
-
-	// Si le tableau etait vide avant l'envoi
-	if(head->first_occupied == -1) { head->first_occupied = current; }
-	else{
-		int last_occupied = head->last_occupied;
-		messages[last_occupied].offset = last_occupied - current;
-
-	}
 	head->last_occupied = current;
-	*/
 
 	// Unlock le mutex
 	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
@@ -187,13 +171,14 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	printf("Type message envoye : %ld \n", ((mon_message *)msg)->type);//debug
 	memcpy(&messages[current], (mon_message *)msg, msg_size);
 	messages[current].length = len;
-	messages[current].offset = 0; // debug : offset a changer une fois MAJ de la LC des case occupees faite
+	messages[current].offset = 0; // Le message occupe forcement la derniere case de la LC de cases occupees
 
 	// DEBUG
 	printf("Type : %ld\n", messages[current].type);
 	printf("Length : %ld\n", messages[current].length);
 	printf("Offset : %ld\n", messages[current].offset);
-	printf("Message : %s\n", messages[current].mtext);
+	printf("Message : %d\n", ((int*)messages[current].mtext)[0]);
+	printf("\n");
 	// FIN DEBUG
 
 	// Synchronise la memoire
@@ -207,13 +192,11 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	return 0;
 }
 
-
-/*
-// Quand on supprime un message et qu'on ajoute une case a la LC des cases vides, on peut verifier si
-// offset = length pour une case ou offset = - length pour l'autre case. Ca veut alors dire qu'elles sont
-// concomitente et qu'on peut donc faire une seule grande case
-
 ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
+	mon_message *messages = (mon_message *)file->shared_memory->messages;
+	struct header *head = &file->shared_memory->head;
+
+	// Erreurs
 	if(file->flag == O_WRONLY){
 		printf("Impossible de lire les message de cette file.\n");
 		errno = EPERM;
@@ -223,9 +206,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	// Lock du mutex
 	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
 
-
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
-	ssize_t msg_size;
+	// Recherche d'un message a lire
 	int current;
 	bool msg_to_read = false;
 
@@ -260,10 +241,29 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 			}
 		}
 	}
-	msg_size = messages[current].length;
+
+	// Erreur si buffer trop petit pour recevoir le message
+	ssize_t msg_size = messages[current].length;
 	if(msg_size > len){
 		return my_error("Memoire allouee trop petite pour recevoir le message.", file, UNLOCK, 'b', EMSGSIZE);
 	}
+
+
+	// MAJ de la liste chainee de cases occupee
+
+
+
+	// MAJ de la liste chainee des cases vides
+	int first_free = head->first_free;
+	int last_free = head->last_free;
+
+	if(first_free == -1){ head->first_free = current; }
+	else{ messages[last_free].offset = last_free - current; }
+
+	head->last_free = current;
+	messages[current].offset = 0;  // Le case est forcement la derniere case de la LC des cases libres
+
+	/*
 	// MAJ de la liste chainee de cases occupee
 	int search = head->first_occupied;
 	int current_offset = messages[current].offset;
@@ -304,7 +304,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	else{ messages[last_free].offset = last_free - current; }
 	head->last_free = current;
 	messages[current].offset = 0;
-
+	*/
 
 	// Copie et "suppression" du message
 	memcpy((mon_message *)msg, &messages[current], sizeof(mon_message) + msg_size);
@@ -321,4 +321,3 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 
 	return msg_size;
 }
-*/
