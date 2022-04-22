@@ -241,22 +241,12 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 
 
 int m_deconnexion(MESSAGE *file){
-	file->shared_memory = NULL;
-	return 0;
+	line * addr = file->shared_memory;
+	return munmap(addr, addr->head.pipe_capacity);
 }
 
 int m_destruction(const char *nom){
-	int fd = shm_open(nom, O_RDONLY,0);
-
-	struct stat bufStat ;
-	/*int rsStat =*/ fstat(fd, &bufStat);
-	int len = bufStat.st_size;
-
-	line *srcmem = mmap(0, len , PROT_READ , MAP_PRIVATE | MAP_SHARED, fd, 0);
-
-	munmap(srcmem, len);
-
-	return 0;
+	return shm_unlink(nom);
 }
 
 int initialiser_mutex(pthread_mutex_t *pmutex){
