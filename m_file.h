@@ -30,7 +30,7 @@ typedef struct mon_message{
 } mon_message;
 
 typedef struct header{
-	int max_length_message;
+	size_t max_length_message;
 	int pipe_capacity;
 	int first_occupied;
 	int last_occupied;

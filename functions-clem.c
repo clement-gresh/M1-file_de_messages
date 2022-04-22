@@ -87,6 +87,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	// Attente si tableau plein (sauf si O_NONBLOCK)
 	int current;
 
+
 	while((current = enough_space(file, len)) == -1){
 		if(msgflag == O_NONBLOCK) {
 			my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'b', EAGAIN);
@@ -97,7 +98,9 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	}
 
 	// MAJ DE LA LISTE CHAINEE DES CASES LIBRES
-	int prev = head->first_free;
+	int first_free = head->first_free;
+	int last_free = head->last_free;
+	int prev = first_free;
 
 	if(prev != current){
 		while(prev + messages[prev].offset != current){
@@ -108,7 +111,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	int free_space = messages[current].length - sizeof(mon_message) - len;
 	int current_offset = messages[current].offset;
 	int current_length = messages[current].length;
-	int msg_size = sizeof(mon_message) + len;
+	size_t msg_size = sizeof(mon_message) + len;
 
 	// Si current a assez de place libre pour stocker ce message plus un autre
 	if(free_space > sizeof(mon_message)){
@@ -123,18 +126,14 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		if(current_offset != 0){ messages[next].offset = current_offset - msg_size; }
 		else{ messages[next].offset = 0; }
 	}
+
 	// Sinon si current est la premiere case de la LC
 	else if(prev == current){
-		// S'il y a une autre case libre dans la LC
-		if(current_offset != 0){
-			head->first_free = current + current_offset;
-		}
-		// Si current etait la seule case libre de la LC
-		else{
-			head->first_free = -1;
-			head->last_free = -1;
-		}
+		// S'il y a une autre case libre dans la LC ou non
+		if(current_offset != 0){ head->first_free = current + current_offset; }
+		else{ head->first_free = -1; }
 	}
+
 	// Sinon (si current n'est pas la premiere case de la LC)
 	else{
 		// S'il y a une autre case libre apres current dans la LC
@@ -150,6 +149,8 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		if(current_offset == 0){ messages[prev].offset = 0; }
 		else{ messages[prev].offset += current_offset; }
 	}
+
+	if(first_free == last_free){ head->last_free = head->first_free; }
 
 
 	// MAJ DE LA LISTE CHAINEE DES CASES OCCUPEES
@@ -185,13 +186,14 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	// Ecrit le message dans la memoire partagee
 	printf("Type message envoye : %ld \n", ((mon_message *)msg)->type);//debug
 	memcpy(&messages[current], (mon_message *)msg, msg_size);
-	messages[current].type = ((mon_message *)msg)->length = len;
+	messages[current].length = len;
+	messages[current].offset = 0; // debug : offset a changer une fois MAJ de la LC des case occupees faite
 
 	// DEBUG
-	printf("Type : %ld.\n", messages[current].type);
-	printf("Length : %ld.\n", messages[current].length);
-	printf("Offset : %ld.\n", messages[current].offset);
-	printf("Message : %s.\n", messages[current].mtext);
+	printf("Type : %ld\n", messages[current].type);
+	printf("Length : %ld\n", messages[current].length);
+	printf("Offset : %ld\n", messages[current].offset);
+	printf("Message : %s\n", messages[current].mtext);
 	// FIN DEBUG
 
 	// Synchronise la memoire
