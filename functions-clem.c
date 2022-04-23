@@ -86,7 +86,6 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	// Attente si tableau plein (sauf si O_NONBLOCK)
 	int current;
 
-
 	while((current = enough_space(file, len)) == -1){
 		if(msgflag == O_NONBLOCK) {
 			return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'b', EAGAIN);

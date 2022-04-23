@@ -43,8 +43,60 @@ int test_connexion(){
 	// debug : Tester les droits (O_RDWR et S_IRWXU)
 	// debug : tester les droits avec differentes valeurs
 	// debug : tester la connexion quand existe deja + le rejet quand existe deja et O_EXECL
+	// debug : tester la connexion a une file anonyme par un processus enfant
 
 	printf("test_connexion() : OK\n\n");
+	return 0;
+}
+
+
+int test_envoi_erreurs(){
+	int t[4] = {-12, 99, 134, 543};
+	struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
+	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
+	m->type = (long) getpid();
+	memmove( m->mtext, t, sizeof( t ));
+
+	/*
+	// Test file Write Only
+	MESSAGE* file1 = m_connexion("/envoi_erreurs_1", O_RDWR | O_CREAT, 8, sizeof(t)*10, S_IRWXU | S_IRWXG | S_IRWXO);
+
+	int i = m_envoi( file1, m, sizeof(t), O_NONBLOCK);
+	if( i != -2 || errno != EPERM){
+		printf("test_envoi_erreurs() : echec gestion envoi dans un tableau read only.\n");
+		printf("Valeur attendue : -1. Erreur attendue : %d.\n", EAGAIN);
+		printf("Valeur recue : %d. Erreur recue : %d.\n", i, errno);
+		printf("\n");
+		return -1;
+	}
+	*/
+
+	// Test envoi d'un message trop long
+	size_t small_size = sizeof(t) - sizeof(char);
+	MESSAGE* file2 = m_connexion("/envoi_erreurs_2", O_RDWR | O_CREAT, 5, small_size, S_IRWXU | S_IRWXG | S_IRWXO);
+
+	int i = m_envoi( file2, m, sizeof(t), O_NONBLOCK);
+	if( i != -1 || errno != EMSGSIZE){
+		printf("test_envoi() : echec gestion envoi d'un message trop long.\n");
+		printf("Valeur attendue : -1. Erreur attendue : %d.\n", EMSGSIZE);
+		printf("Valeur recue : %d. Erreur recue : %d.\n", i, errno);
+		printf("\n");
+		return -1;
+	}
+
+	// Test envoi avec mauvai drapeau
+	MESSAGE* file3 = m_connexion("/envoi_erreurs_3", O_RDWR | O_CREAT, 5, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+
+	i = m_envoi( file3, m, sizeof(t), O_RDWR);
+	if( i != -1 || errno != EIO){
+		printf("test_envoi() : echec gestion envoi avec mauvais drapeau.\n");
+		printf("Valeur attendue : -1. Erreur attendue : %d.\n", EIO);
+		printf("Valeur recue : %d. Erreur recue : %d.\n", i, errno);
+		printf("\n");
+		return -1;
+	}
+
+	printf("test_envoi_erreurs() : OK\n\n");
 	return 0;
 }
 
@@ -79,9 +131,11 @@ int test_envoi(){
 	}
 
 	// Test : envoi en mode non bloquant SANS place
-	if( m_envoi( file, m, sizeof(t), O_NONBLOCK) != -1 &&  errno != EAGAIN){
+	int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
+	if( i != -1 || errno != EAGAIN){
 		printf("test_envoi() : echec gestion envoi dans un tableau plein (mode non bloquant).\n");
-		// debug : details to add
+		printf("Valeur attendue : -1. Erreur attendue : %d.\n", EAGAIN);
+		printf("Valeur recue : %d. Erreur recue : %d.\n", i, errno);
 		printf("\n");
 		return -1;
 	}
@@ -140,11 +194,15 @@ int test_envois_multiples(){
 	}
 
 	// Test : envoi en mode non bloquant SANS place
-	if( m_envoi( file, m, sizeof(t), O_NONBLOCK) != -1 &&  errno != EAGAIN){
-		printf("test_envoi() : echec gestion envoi dans un tableau plein (mode non bloquant).\n");
-		// debug : details to add
-		printf("\n");
-		return -1;
+	for(int j = 0; j < 3; j++){
+		int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
+		if( i != -1 ||  errno != EAGAIN){
+			printf("test_envoi() : echec gestion envoi n %d dans un tableau plein (mode non bloquant).\n", j + 1);
+			printf("Valeur attendue : -1. Erreur attendue : %d.\n", EAGAIN);
+			printf("Valeur recue : %d. Erreur recue : %d.\n", i, errno);
+			printf("\n");
+			return -1;
+		}
 	}
 
 	printf("test_envois_multiples() : OK\n\n");
@@ -157,6 +215,7 @@ int test_envois_multiples(){
 int main(int argc, const char * argv[]) {
 	printf("\n\n");
 	test_connexion();
+	test_envoi_erreurs();
 	test_envoi();
 	test_envois_multiples();
 	/*
