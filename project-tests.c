@@ -8,7 +8,7 @@ void test_connexion(){
 	struct header *head = &file->shared_memory->head;
 
 	if(strcmp(file->name, name) != 0 || head->pipe_capacity != 12 || head->max_length_message != sizeof(char)*20){
-		printf("Header attribute error\n");
+		printf("test_connexion() : Header attribute error\n");
 		printf("Given name : %s.  Target pipe capacity : %d. Target max message length : %ld.\n",
 				"/kangourou", 12, sizeof(char)*20);
 		printf("Actual name : %s.  Actual pipe capacity : %d. Actual max message length : %ld.\n",
@@ -17,14 +17,14 @@ void test_connexion(){
 	}
 
 	if(file->memory_size != sizeof(header) + (sizeof(mon_message) + 20 * sizeof(char)) * 12){
-		printf("Memory allocation error\n");
+		printf("test_connexion : Memory allocation error\n");
 		printf("Target memory size : %ld\n", sizeof(header) + (sizeof(mon_message) + 20 * sizeof(char)) * 12);
 		printf("Actual memory size : %ld\n", file->memory_size);
 		printf("\n");
 	}
 
 	if(head->first_free != 0 || head->last_free != 0 || head->first_occupied != -1 || head->last_occupied != -1){
-		printf("Memory indexes error\n");
+		printf("test_connexion: Memory indexes error\n");
 		printf("Target index values : 0, 0, -1, -1\n");
 		printf("Actual index values: %d, %d, %d, %d\n",
 				head->first_free, head->last_free, head->first_occupied, head->last_occupied);
@@ -32,13 +32,53 @@ void test_connexion(){
 	}
 
 	// debug : Tester les droits (O_RDWR et S_IRWXU)
+	// debug : tester les droits avec differentes valeurs
+	// debug : tester la connexion quand existe deja + le rejet quand existe deja et O_EXECL
 }
 
-void test_envoi_reception(){
+int test_envoi_reception(){
+	int t[4] = {-12, 99, 134, 543};
+	MESSAGE* file = m_connexion("/envoi_reception", O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	struct header *head = &file->shared_memory->head;
 
+	struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
+	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
+
+	m->type = (long) getpid();
+	memmove( m->mtext, t, sizeof( t ));
+
+	// Debug : verifier les erreurs de m_envoi
+
+	// envoi en mode non bloquant
+	if( m_envoi( file, m, sizeof(t), O_NONBLOCK) != 0 ){
+		printf("test_envoi_reception() : echec envoie 1er message.\n");
+		return -1;
+	}
+
+	//int msg_size = sizeof(mon_message) + sizeof(t);
+	if(head->first_free != -1 || head->last_free != -1
+			|| head->first_occupied != 0 || head->last_occupied != 0){
+		printf("test_envoi_reception : erreur d'indice apres envoi 1er message.\n");
+		printf("Target index values : -1, -1, 0, 0\n");
+		printf("Actual index values: %d, %d, %d, %d\n",
+				head->first_free, head->last_free, head->first_occupied, head->last_occupied);
+		printf("\n");
+		return -1;
+	}
+
+	if( m_envoi( file, m, sizeof(t), O_NONBLOCK) != -1 &&  errno != EAGAIN){
+			printf("test_envoi_reception() : echec gestion envoi dans un tableau plein (mode non bloquant).\n");
+			// debug : details to add
+			printf("\n");
+			return -1;
+		}
+
+	printf("test_envoi_reception() : OK\n\n");
+	return 0;
 }
 
 int main(int argc, const char * argv[]) {
+	printf("\n\n");
 	test_connexion();
 	test_envoi_reception();
 
@@ -80,6 +120,7 @@ int main(int argc, const char * argv[]) {
 		printf("\n\n");
 		// FIN DEBUG
 	}
+
 	/*
 	// reception
 	struct mon_message *m2 = malloc( sizeof( struct mon_message ) + sizeof( t ) );

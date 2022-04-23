@@ -6,6 +6,7 @@
 int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
 	struct header *head = &file->shared_memory->head;
 	perror(txt);
+
 	if(unlock){
 		if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 	}
@@ -16,7 +17,7 @@ int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
 		if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
 	}
 	if(error > 0) { errno = error; }
-	return(-1);
+	return -1;
 }
 
 // Debug : my_error a utiliser
@@ -26,22 +27,22 @@ int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(file->flag == O_RDONLY){
 		printf("Impossible d'ecrire dans cette file.\n");
 		errno = EPERM;
-		exit(-1);
+		return -1;
 	}
 	if(len > head->max_length_message){
 		printf("La taille du message excede la taille maximale autorisee.\n");
 		errno = EMSGSIZE;
-		exit(-1);
+		return -1;
 	}
 	if(msgflag != 0 && msgflag != O_NONBLOCK){
 		printf("Valeur de msgflag incorrecte.\n");
 		errno = EIO;
-		exit(-1);
+		return -1;
 	}
 	if((head->first_free == -1) && (msgflag == O_NONBLOCK)){
 		printf("Le tableau est plein (envoi en mode non bloquant).\n");
 		errno = EAGAIN;
-		exit(-1);
+		return -1;
 	}
 	return 0;
 }
@@ -77,7 +78,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	struct header *head = &file->shared_memory->head;
 
 	// Traitement des erreurs
-	if(m_envoi_erreurs(file, msg, len, msgflag) < 0){ exit(-1); }
+	if(m_envoi_erreurs(file, msg, len, msgflag) < 0){ return -1; }
 
 	// Lock du mutex
 	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
@@ -95,6 +96,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		}
 	}
 
+
 	// MAJ DE LA LISTE CHAINEE DES CASES LIBRES
 	int first_free = head->first_free;
 	int last_free = head->last_free;
@@ -111,16 +113,15 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	int current_length = messages[current].length;
 	size_t msg_size = sizeof(mon_message) + len;
 
-
 	// Si current a assez de place libre pour stocker ce message plus un autre
 	if(free_space > sizeof(mon_message)){
 		// "Creation" de next
 		int next = current + msg_size;
 		printf("next %d \n", next); // debug
-		printf("next.length avant %ld \n", messages[next].length); // debug
-		printf("nouvelle valleur %ld \n", current_length - msg_size); // debug
+		//printf("next.length avant %ld \n", messages[next].length); // debug
+		//printf("nouvelle valleur %ld \n", current_length - msg_size); // debug
 		messages[next].length = current_length - msg_size;
-		printf("next.length apres %ld \n", messages[next].length); // debug
+		//printf("next.length apres %ld \n", messages[next].length); // debug
 
 		if(current_offset != 0){ messages[next].offset = current_offset - msg_size; }
 		else{ messages[next].offset = 0; }
@@ -173,17 +174,18 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
 
 	// Ecrit le message dans la memoire partagee
-	printf("Type message envoye : %ld \n", ((mon_message *)msg)->type);//debug
 	memcpy(&messages[current], (mon_message *)msg, msg_size);
 	messages[current].length = len;
 	messages[current].offset = 0; // Le message occupe forcement la derniere case de la LC de cases occupees
 
 	// DEBUG
+	/*
 	printf("Type : %ld\n", messages[current].type);
 	printf("Length : %ld\n", messages[current].length);
 	printf("Offset : %ld\n", messages[current].offset);
 	printf("Message : %d\n", ((int*)messages[current].mtext)[0]);
 	printf("\n");
+	*/
 	// FIN DEBUG
 
 	// Synchronise la memoire

@@ -178,7 +178,7 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 		if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
 		struct stat bufStat;
 		fstat(fd, &bufStat);
-		printf("ici _n\n");
+		//printf("ici _n\n"); debug
 		int prot = build_prot(options);
 		int map_flag = private_or_shared(nom);
 		addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
@@ -196,7 +196,7 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 		msg->shared_memory->head.last_free = 0;
 
 		// La place disponible pour un message
-		((mon_message*)msg->shared_memory->messages)[0].length = msg->memory_size;
+		((mon_message*)msg->shared_memory->messages)[0].length = msg->memory_size - sizeof(header);
 		((mon_message*)msg->shared_memory->messages)[0].offset = 0;
 
 		va_end(parametersInfos);
