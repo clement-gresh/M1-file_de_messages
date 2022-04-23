@@ -5,7 +5,7 @@
 
 int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
 	struct header *head = &file->shared_memory->head;
-	perror(txt);
+	printf("%s", txt);
 
 	if(unlock){
 		if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
@@ -25,24 +25,13 @@ int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	struct header *head = &file->shared_memory->head;
 
 	if(file->flag == O_RDONLY){
-		printf("Impossible d'ecrire dans cette file.\n");
-		errno = EPERM;
-		return -1;
+		return my_error("Impossible d'ecrire dans cette file.\n", file, NO_UNLOCK, 'w', EPERM);
 	}
 	if(len > head->max_length_message){
-		printf("La taille du message excede la taille maximale autorisee.\n");
-		errno = EMSGSIZE;
-		return -1;
+		return my_error("La taille du message excede la taille maximale.\n", file, NO_UNLOCK, 'b', EMSGSIZE);
 	}
 	if(msgflag != 0 && msgflag != O_NONBLOCK){
-		printf("Valeur de msgflag incorrecte.\n");
-		errno = EIO;
-		return -1;
-	}
-	if((head->first_free == -1) && (msgflag == O_NONBLOCK)){
-		printf("Le tableau est plein (envoi en mode non bloquant).\n");
-		errno = EAGAIN;
-		return -1;
+		return my_error("Valeur de msgflag incorrecte.\n", file, NO_UNLOCK, 'b', EIO);
 	}
 	return 0;
 }
@@ -88,7 +77,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	while((current = enough_space(file, len)) == -1){
 		if(msgflag == O_NONBLOCK) {
-			return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_UNLOCK, 'b', EAGAIN);
+			return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, UNLOCK, 'b', EAGAIN);
 		}
 		if(pthread_cond_wait(&head->wcond, &head->mutex) > 0) {
 			perror("wait wcond"); exit(-1);
