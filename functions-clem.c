@@ -116,7 +116,11 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(free_space > sizeof(mon_message)){
 		// "Creation" de next
 		int next = current + msg_size;
+		printf("next %d \n", next); // debug
+		printf("next.length avant %ld \n", messages[next].length); // debug
+		printf("nouvelle valleur %ld \n", current_length - msg_size); // debug
 		messages[next].length = current_length - msg_size;
+		printf("next.length apres %ld \n", messages[next].length); // debug
 
 		if(current_offset != 0){ messages[next].offset = current_offset - msg_size; }
 		else{ messages[next].offset = 0; }
@@ -124,6 +128,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		// MAJ de prev
 		if(head->first_free == current){ head->first_free = next; }
 		else{ messages[prev].offset += msg_size; }
+
 	}
 
 	// Sinon si current est la premiere case de la LC
@@ -249,29 +254,15 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	}
 
 
-	// MAJ de la liste chainee de cases occupee
-
-
-
-	// MAJ de la liste chainee des cases vides
-	int first_free = head->first_free;
-	int last_free = head->last_free;
-
-	if(first_free == -1){ head->first_free = current; }
-	else{ messages[last_free].offset = last_free - current; }
-
-	head->last_free = current;
-	messages[current].offset = 0;  // Le case est forcement la derniere case de la LC des cases libres
-
-	/*
-	// MAJ de la liste chainee de cases occupee
-	int search = head->first_occupied;
+	
+	// MAJ LISTE CHAINEE CASES OCCUPEES
+	int prev = head->first_occupied;
 	int current_offset = messages[current].offset;
-	int search_offset = messages[search].offset;
+	int prev_offset = messages[prev].offset;
 
-		// Si current est la premiere case de la LC
-	if(current == search){
-			// Si current est aussi la derniere case de la LC
+	// Si current est la premiere case de la LC
+	if(current == prev){
+		// Si current est aussi la derniere case de la LC
 		if(messages[current].offset == 0){
 			head->first_occupied = -1;
 			head->last_occupied = -1;
@@ -280,31 +271,37 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 			head->first_occupied = current + current_offset;
 		}
 	}
+	// Sinon si current n'est pas la premiere case de la LC
 	else{
-		while(search != current){
+		while(prev != current){
 			// Si current est la prochaine case de la LC
-			if(search + search_offset == current){
+			if(prev + prev_offset == current){
 				// Si current est la derniere case de la LC
 				if(current_offset == 0) {
-					messages[search].offset = 0;
-					head->last_occupied = search;
+					messages[prev].offset = 0;
+					head->last_occupied = prev;
 				}
 				else{
-					messages[search].offset = search_offset + current_offset;
+					messages[prev].offset = prev_offset + current_offset;
 				}
 			}
-			search = search + search_offset;
-			search_offset = messages[search].offset;
+			prev = prev + prev_offset;
+			prev_offset = messages[prev].offset;
 		}
 	}
-	// MAJ de la liste chainee de cases vides
+	
+
+	// MAJ LISTE CHAINEE CASES VIDES
 	int last_free = head->last_free;
 
-	if(last_free == -1) { head->first_free = current; }
+	if(last_free == -1){ head->first_free = current; }
 	else{ messages[last_free].offset = last_free - current; }
+
 	head->last_free = current;
-	messages[current].offset = 0;
-	*/
+	messages[current].offset = 0;  // Le case est forcement la derniere case de la LC des cases libres
+
+	
+	
 
 	// Copie et "suppression" du message
 	memcpy((mon_message *)msg, &messages[current], sizeof(mon_message) + msg_size);
