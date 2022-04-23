@@ -199,14 +199,15 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 		((mon_message*)msg->shared_memory->messages)[0].length = msg->memory_size - sizeof(header);
 		((mon_message*)msg->shared_memory->messages)[0].offset = 0;
 
+		if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
+		if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
+		if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
+
 		va_end(parametersInfos);
 
     }
     else if(!is_o_creat(options) && nom!=NULL){ // il existe
     	MESSAGE *msg = malloc(sizeof(MESSAGE));
-
-		size_t len_name = sizeof(nom); // debug : est ce que le champ nom est utile ?
-		assert(len_name<LEN_NAME);
 
 		int fd = shm_open(nom, options, 0);
 		if( fd == -1 ){ perror("shm_open"); exit(1);}
@@ -222,18 +223,13 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 		}
 
 		memcpy(msg->name, nom, len_name);
-		msg->memory_size = sizeof(addr->head) + addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
+		msg->memory_size = sizeof(header) + addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
 		msg->flag = options;
 		msg->shared_memory = addr;
-
     }
     else{
     	return NULL;
     }
-
-	if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
-	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
-	if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
 
 	return msg;
 

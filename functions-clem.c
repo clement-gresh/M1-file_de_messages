@@ -117,7 +117,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	if(free_space > sizeof(mon_message)){
 		// "Creation" de next
 		int next = current + msg_size;
-		printf("next %d \n", next); // debug
+		//printf("next %d \n", next); // debug
 		//printf("next.length avant %ld \n", messages[next].length); // debug
 		//printf("nouvelle valleur %ld \n", current_length - msg_size); // debug
 		messages[next].length = current_length - msg_size;
