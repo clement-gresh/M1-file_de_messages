@@ -6,3 +6,4 @@ functions-clem
 functions-hugo
 project-tests
 *.o
+.vscode/*
