@@ -151,11 +151,11 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 	struct mon_message *m = malloc(size_msg);
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
 
-	m->type = (long) getpid();
 	memmove( m->mtext, t, sizeof( t ));
 
 	// Test : envois en mode non bloquant AVEC de la place
 	for(int j = 0; j < msg_nb; j++){
+		m->type = (long) 1000 + pow(-2.0,(double) j);
 		if( m_envoi( file, m, sizeof(t), O_NONBLOCK) != 0 ){
 			printf("test_envois_multiples() : ECHEC : envoie message n %d.\n", j + 1);
 			return -1;
@@ -186,6 +186,11 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 			}
 		}
 	}
+	// Verifie les offsets dans la file
+	for(int j = 0; j < msg_nb; j++){
+		printf("offset message n %d : %ld\n", j+1, ((mon_message *)file->shared_memory->messages)[j*size_msg].offset);
+	}
+
 
 	// Test : envoi en mode non bloquant SANS place
 	for(int j = 0; j < 3; j++){
@@ -205,16 +210,31 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 
 
 int test_reception_erreurs(){
+	// Test envoi avec drapeau incorrect
+	MESSAGE* file = m_connexion("/reception_erreurs_1", O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+
+	struct mon_message *m1 = malloc( sizeof( struct mon_message ) + sizeof(t));
+	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
+
+	ssize_t s = m_reception(file, m1, sizeof(t), 0, O_RDWR);
+	if( s != -1 || errno != EIO){
+		printf("test_reception_erreurs() : ECHEC : gestion reception avec drapeau incorrect.\n");
+		printf("Valeur attendue : -1. Erreur attendue : %d.\n", EIO);
+		printf("Valeur recue : %ld. Erreur recue : %d.\n", s, errno);
+		printf("\n");
+		return -1;
+	}
+
 	// Test file Write Only
 	/*
 	size_t size_msg = sizeof(char)*100;
-	MESSAGE* file1 = m_connexion("/reception_erreurs_1",
+	MESSAGE* file1 = m_connexion("/reception_erreurs_2",
 			O_WRONLY | O_CREAT, 8, size_msg, S_IRWXU | S_IRWXG | S_IRWXO);
 
 	struct mon_message *m1 = malloc( sizeof( struct mon_message ) + size_msg);
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
-	ssize_t s = m_reception(file1, m1, sizeof( struct mon_message ) + size_msg, 0, 0);
+	ssize_t s = m_reception(file1, m1, size_msg, 0, 0);
 	if( s != -1 || errno != EPERM){
 		printf("test_reception_erreurs() : ECHEC : gestion lecture quand Read Only.\n");
 		printf("Valeur attendue : -1. Erreur attendue : %d.\n", EPERM);
@@ -222,20 +242,20 @@ int test_reception_erreurs(){
 		printf("\n");
 		return -1;
 	}
-	printf("test_reception_erreurs() : OK\n\n");
 	*/
+
+	printf("test_reception_erreurs() : OK\n\n");
 	return 0;
 }
 
 
-int  test_reception(MESSAGE* file){
+int test_reception(MESSAGE* file){
 	struct header *head = &file->shared_memory->head;
-	size_t size_msg = sizeof(mon_message) + sizeof(t);
-	struct mon_message *m1 = malloc( size_msg);
+	struct mon_message *m1 = malloc(sizeof(mon_message) + sizeof(t));
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
-	// Reception en mode bloquant alors qu'il y a bien un message dans la file
-	ssize_t s = m_reception(file, m1, size_msg, 0, 0);
+	// Reception quand il y a bien un message dans la file
+	ssize_t s = m_reception(file, m1, sizeof(t), 0, 0);
 	if(s != sizeof(t) || m1->length != sizeof(t) || ((int*)m1->mtext)[2] != t[2] || m1->type != getpid()){
 		printf("test_reception() : ECHEC : reception.\n");
 		printf("Valeurs attendues : retour %ld, length %ld, mtext %d, type %d.\n", sizeof(t), sizeof(t), t[2], getpid());
@@ -257,7 +277,7 @@ int  test_reception(MESSAGE* file){
 
 
 	// Reception en mode NON bloquant alors qu'il n'y a pas de message dans la file
-	s = m_reception(file, m1, size_msg, 0, O_NONBLOCK);
+	s = m_reception(file, m1, sizeof(t), 0, O_NONBLOCK);
 	if( s != -1 || errno != EAGAIN){
 		printf("test_reception() : ECHEC : gestion reception a partir d'un tableau vide (mode non bloquant).\n");
 		printf("Valeur attendue : -1. Erreur attendue : %d.\n", EAGAIN);
@@ -271,7 +291,67 @@ int  test_reception(MESSAGE* file){
 }
 
 
-int  test_receptions_multiples(MESSAGE* file, int msg_nb){
+int test_receptions_multiples(MESSAGE* file, int msg_nb){
+	//struct header *head = &file->shared_memory->head;
+	struct mon_message *m1 = malloc(sizeof(mon_message) + sizeof(t));
+	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
+
+	// Receptions multiples alors qu'il y a bien des messages dans la file
+	for(int j = 0; j < msg_nb; j++){
+		long type;
+		if(j == 0){ type = 1004; }
+		else if(j == 1){ type = -970; }
+		else{ type = (long) 1000 + pow(-2.0,(double) j); }
+
+		ssize_t s = m_reception(file, m1, sizeof(t), type, O_NONBLOCK);
+
+		// Reception avec une valeur specifique de type
+		if(j == 0){
+			if(s != sizeof(t) || m1->type != 1004){
+				printf("test_receptions_multiples() : ECHEC : reception avec valeur specifique de type.\n");
+				printf("Valeurs attendues : retour %ld, type %d.\n", sizeof(t), 1004);
+				printf("Valeurs recues : retour %ld, type %ld.\n", s, m1->type);
+				printf("\n");
+				return -1;
+			}
+		}
+		/*
+		// Reception avec une valeur negative de type
+		else if(j == 1){
+
+		}
+		// Pas de messages correspondant
+		else if(j == 2 || j == 5){
+
+		}
+
+		// S'arreter la. Essayer de renvoyer des messages avec m_envoi pour verifier que ca marche
+
+		else{
+
+		}
+
+		if(s != sizeof(t) || m1->length != sizeof(t) || ((int*)m1->mtext)[2] != t[2] || m1->type != 1001){
+			printf("test_receptions_multiples() : ECHEC : reception.\n");
+			printf("Valeurs attendues : retour %ld, length %ld, mtext %d, type %d.\n", sizeof(t), sizeof(t), t[2], getpid());
+			printf("Valeurs recues : retour %ld, length %ld, mtext %d, type %ld.\n", s, m1->length, ((int*)m1->mtext)[2], m1->type);
+			printf("\n");
+			return -1;
+		}
+
+		// Verifie les valeurs des index
+		if(head->first_free != 0 || head->last_free != 0
+				|| head->first_occupied != -1 || head->last_occupied != -1){
+			printf("test_receptions_multiples() : ECHEC : indices apres reception 1er message.\n");
+			printf("Target index values : 0, 0, -1, -1\n");
+			printf("Actual index values: %d, %d, %d, %d\n",
+					head->first_free, head->last_free, head->first_occupied, head->last_occupied);
+			printf("\n");
+			return -1;
+		}
+		*/
+	}
+
 
 	printf("test_receptions_multiples() : OK\n\n");
 	return 0;
@@ -292,7 +372,7 @@ int main(int argc, const char * argv[]) {
 	test_envoi(file);
 	test_reception(file);
 
-	int msg_nb = 9; // debug : segmentation fault quand on passe de 9 à 10
+	int msg_nb = 20; // debug : segmentation fault quand on passe de 9 à 10
 	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
@@ -345,7 +425,7 @@ int main(int argc, const char * argv[]) {
 	struct mon_message *m2 = malloc( sizeof( struct mon_message ) + sizeof( t ) );
 	if( m2 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
-	ssize_t s = m_reception(file, m2, sizeof( struct mon_message ) + sizeof( t ), 0, 0);
+	ssize_t s = m_reception(file, m2, sizeof( t ), 0, 0);
 
 	if( s > 0 ){
 		printf("message recu.\n");

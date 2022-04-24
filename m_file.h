@@ -14,7 +14,8 @@
 #include <sys/mman.h>
 #include <assert.h>
 #include <stddef.h>
-#include <stdarg.h> // pour avoir le nombre d'arguments qui varie dans une même fonction 
+#include <stdarg.h> // pour avoir le nombre d'arguments qui varie dans une meme fonction
+#include <math.h>
 
 #define UNLOCK true
 #define NO_UNLOCK false
@@ -71,7 +72,6 @@ size_t m_nb(MESSAGE *);
 int initialiser_mutex(pthread_mutex_t *pmutex);
 int initialiser_cond(pthread_cond_t *pcond);
 int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error);
-int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag);
 
 
 #endif /* M_FILE_H_ */

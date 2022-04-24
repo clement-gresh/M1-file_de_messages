@@ -21,7 +21,7 @@ int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error){
 }
 
 // Debug : my_error a utiliser
-int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
+int m_envoi_erreurs(MESSAGE *file, size_t len, int msgflag){
 	struct header *head = &file->shared_memory->head;
 
 	if(file->flag == O_RDONLY){
@@ -31,7 +31,7 @@ int m_envoi_erreurs(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		return my_error("La taille du message excede la taille maximale.\n", file, NO_UNLOCK, 'b', EMSGSIZE);
 	}
 	if(msgflag != 0 && msgflag != O_NONBLOCK){
-		return my_error("Valeur de msgflag incorrecte.\n", file, NO_UNLOCK, 'b', EIO);
+		return my_error("Valeur de msgflag incorrecte dans m_envoi.\n", file, NO_UNLOCK, 'b', EIO);
 	}
 	return 0;
 }
@@ -67,7 +67,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	struct header *head = &file->shared_memory->head;
 
 	// Traitement des erreurs
-	if(m_envoi_erreurs(file, msg, len, msgflag) < 0){ return -1; }
+	if(m_envoi_erreurs(file, len, msgflag) < 0){ return -1; }
 
 	// Lock du mutex
 	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
@@ -117,7 +117,6 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 		// MAJ de prev
 		if(head->first_free == current){ head->first_free = next; }
 		else{ messages[prev].offset += msg_size; }
-
 	}
 
 	// Sinon si current est la premiere case de la LC
@@ -151,7 +150,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	int last_occupied = head->last_occupied;
 
 	if(first_occupied == -1){ head->first_occupied = current; }
-	else{ messages[last_occupied].offset = last_occupied - current; }
+	else{ messages[last_occupied].offset = current - last_occupied;	}
 
 	head->last_occupied = current;
 
@@ -193,9 +192,10 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 
 	// Erreurs
 	if(file->flag == O_WRONLY){
-		printf("Impossible de lire les message de cette file.\n");
-		errno = EPERM;
-		exit(-1);
+		return my_error("Impossible de lire les message de cette file.\n", file, NO_UNLOCK, 'w', EPERM);
+	}
+	if(flags != 0 && flags != O_NONBLOCK){
+		return my_error("Valeur de msgflag incorrecte dans m_reception.\n", file, NO_UNLOCK, 'b', EIO);
 	}
 
 	// Lock du mutex
@@ -214,13 +214,14 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		}
 		else if(type != 0 && current != -1){
 			while(true){
-				if((type>0 && messages[current].type == type)
-						|| (type<0 && messages[current].type <= -type)){
+				if((type>0 && messages[current].type == type) || (type<0 && messages[current].type <= -type)){
 					msg_to_read = true;
 					break;
 				}
+				else if(current == head->last_occupied){
+					 break;
+				}
 				else{
-					if(current == head->last_occupied) { break; }
 					current = current + messages[current].offset;
 				}
 			}
@@ -290,10 +291,8 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	head->last_free = current;
 	messages[current].offset = 0;  // Le case est forcement la derniere case de la LC des cases libres
 
-	
-	
 
-	// Copie et "suppression" du message
+	// Copie du message
 	memcpy((mon_message *)msg, &messages[current], sizeof(mon_message) + msg_size);
 
 	// Synchronise la memoire

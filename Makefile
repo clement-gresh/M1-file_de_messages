@@ -1,7 +1,7 @@
 CPP=gcc # g++ ?
 CFLAGS= -Wall -g -pedantic
 LDLIBS = -pthread
-LIBS = -lrt
+LIBS = -lrt -lm
 
 
 all : project-tests
