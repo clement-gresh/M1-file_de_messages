@@ -188,7 +188,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	mon_message *messages = (mon_message *)file->shared_memory->messages;
-	struct header *head = &file->shared_memory->head;
+	header *head = &file->shared_memory->head;
 
 	// Erreurs
 	if(file->flag == O_WRONLY){
@@ -286,7 +286,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	int last_free = head->last_free;
 
 	if(last_free == -1){ head->first_free = current; }
-	else{ messages[last_free].offset = last_free - current; }
+	else{ messages[last_free].offset = current- last_free; }
 
 	head->last_free = current;
 	messages[current].offset = 0;  // Le case est forcement la derniere case de la LC des cases libres
