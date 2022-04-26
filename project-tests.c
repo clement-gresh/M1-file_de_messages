@@ -279,65 +279,124 @@ int test_reception(MESSAGE* file){
 }
 
 
-// Test m_reception en tentant de recuperer plusieurs messages avec des valeurs positives et negatives de type
+// Verifie les index et offsets apres receptions multiples
+int test_receptions_multiples_fin(header *head, mon_message *messages, int msg_nb, size_t size_msg,
+		int position1, int position2, int position3){
+
+	// Verifie les index une fois les appels a m_reception termines
+	char text5[] = "test_receptions_multiples_fin() : ECHEC : indice apres reception de tous les messages.";
+	if(index_check(head, text5, position1 * size_msg, (msg_nb - 1) * size_msg, 0, position3 * size_msg) == -1)
+		{ return -1; };
+
+
+	// Verifie la valeur des offsets des 3 premieres cases libres de la LC
+	char text6[] = "test_receptions_multiples_fin() : ECHEC : offset 1ere case libre apres multiples receptions.";
+	if(offset_check(messages, text6, size_msg * (position2 - position1), position1 * size_msg) == -1) {return -1;}
+
+	char text7[] = "test_receptions_multiples_fin() : ECHEC : offset 2eme case libre apres multiples receptions.";
+	if(offset_check(messages, text7, -2 * size_msg, position2 * size_msg) == -1) {return -1;}
+
+	char text8[] = "test_receptions_multiples_fin() : ECHEC : offset 3eme case libre apres multiples receptions.";
+	if(offset_check(messages, text8, 3 * size_msg, 3 * size_msg) == -1) {return -1;}
+
+
+	// Verifie la valeur des offsets des 3 cases occupees de la LC
+	char text9[] = "test_receptions_multiples_fin() : ECHEC : offset 1ere case occupee apres multiples receptions.";
+	if(offset_check(messages, text9, size_msg, 0) == -1) {return -1;}
+
+	char text10[] = "test_receptions_multiples_fin() : ECHEC : offset 2eme case occupee apres multiples receptions.";
+	if(offset_check(messages, text10, 3 * size_msg, size_msg) == -1) {return -1;}
+
+	char text11[] = "test_receptions_multiples_fin() : ECHEC : offset 3eme/derniere case occupee apres multiples receptions.";
+	if(offset_check(messages, text11, 0, 4 * size_msg) == -1) {return -1;}
+
+	return 0;
+}
+
+
+// Teste la reception avec type strictement positif
+int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1){
+	struct header *head = &file->shared_memory->head;
+	mon_message *messages = (mon_message *)file->shared_memory->messages;
+
+	ssize_t s = m_reception(file, m1, sizeof(t), messages[position1*size_msg].type, O_NONBLOCK);
+
+	// Verifie les donnees du message
+	char text0[] = "test_reception_type_pos() : ECHEC : reception avec valeur specifique de type.";
+	if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], 1004) == -1)
+		{return -1;}
+
+	// Verifie les valeurs des index
+	char text1[] = "test_reception_type_pos() : ECHEC : indices apres reception 1er message.";
+	if(index_check(head, text1, position1 * size_msg, position1 * size_msg, 0, (msg_nb - 1) * size_msg) == -1)
+		{ return -1; };
+
+	// Verifie la valeur de l'offset
+	char text2[] = "test_reception_type_pos() : ECHEC : offset case libre dans la file apres reception 1er msg.";
+	if(offset_check(messages, text2, 0, head->first_free) == -1)
+		{return -1;}
+
+	return 0;
+}
+
+// Teste la reception avec type negatif
+int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1, int position2){
+	struct header *head = &file->shared_memory->head;
+	mon_message *messages = (mon_message *)file->shared_memory->messages;
+
+	ssize_t s = m_reception(file, m1, sizeof(t), -(messages[position2*size_msg].type + 2), O_NONBLOCK);
+
+	// Verifie les donnees du message
+	char text0[] = "test_reception_type_neg() : ECHEC : reception avec valeur negative de type.";
+	if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], 968) == -1) {return -1;}
+
+	// Verifie les valeurs des index
+	char text[] = "test_reception_type_neg() : ECHEC : indice apres reception 2eme message.";
+	if(index_check(head, text, position1 * size_msg, position2 * size_msg, 0, (msg_nb - 1) * size_msg) == -1)
+		{ return -1; };
+
+	// Verifie la valeur des offsets (premiere et deuxieme case libre)
+	char text2[] = "test_reception_type_neg() : ECHEC : offset case libre 1 dans la file apres reception 2eme msg.";
+	if(offset_check(messages, text2, size_msg * (position2 - position1), head->first_free) == -1) {return -1;}
+
+	char text3[] = "test_reception_type_neg() : ECHEC : offset case libre 2 dans la file apres reception 2eme msg.";
+	if(offset_check(messages, text3, 0, head->last_free) == -1 ) {return -1;}
+
+	return 0;
+}
+
+// Test m_reception en tentant de lire plusieurs messages en utilisant des valeurs positives et negatives de type
+// Types dans la file : 1001, 998, 1004, 992, 1016, 968, 1064, 872, 1256, 488, 2024, 1048, 5096, 7192...
+// Lit d'abord le message 1004 (type = 1004), puis 968 (type = -970)
+// Puis lit dans l'ordre les cases suivantes a partir de 992
+// Exception : le 5eme essai utilise type = -2 et donc echoue (la case 1016 n'est donc pas lue)
+// A la fin les cases qui sont toujours occupees sont les cases 0 (1001), 1 (998), 4 (1016)
 int test_receptions_multiples(MESSAGE* file, int msg_nb){
 	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
 	struct header *head = &file->shared_memory->head;
 	mon_message *messages = (mon_message *)file->shared_memory->messages;
 	struct mon_message *m1 = malloc(size_msg);
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
+	int position1 = 2; // position of message with type 1004
+	int position2 = 5; // position of message with type 968
+	int position3 = 4; // position of message with type 1016
+
+	// Teste reception avec un type strictement positif
+	if(test_reception_type_pos(file, m1, size_msg, msg_nb, position1) == -1) {return -1;}
+
+	// Teste reception avec un type strictement negatif
+	if(test_reception_type_neg(file, m1, size_msg, msg_nb, position1, position2) == -1) {return -1;}
 
 	// Receptions multiples alors qu'il y a bien des messages dans la file
-	for(int j = 0; j < msg_nb; j++){
+	for(int j = 2; j < msg_nb; j++){
 		long type;
-		int position1 = 2;
-		int position2 = 5;
-
-		if(j == 0){ type = 1004; }
-		else if(j == 1){ type = -970; }
-		else if(j == 4){ type = -2; }
+		if(j == 4){ type = -2; }
 		else{ type = abs((long) 1000 + pow(-2.0,(double) j)); }
 
 		ssize_t s = m_reception(file, m1, sizeof(t), type, O_NONBLOCK);
 
-		// Reception avec un type strictement positif
-		if(j == 0){
-			// Verifie les donnees du message
-			char text0[] = "test_receptions_multiples() : ECHEC : reception avec valeur specifique de type.";
-			if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], 1004) == -1)
-				{return -1;}
-
-			// Verifie les valeurs des index
-			char text1[] = "test_receptions_multiples() : ECHEC : indices apres reception 1er message.";
-			if(index_check(head, text1, position1 * size_msg, position1 * size_msg, 0, (msg_nb - 1) * size_msg) == -1)
-				{ return -1; };
-
-			// Verifie la valeur de l'offset
-			char text2[] = "test_receptions_multiples() : ECHEC : offset case libre dans la file apres reception 1er msg.";
-			if(offset_check(messages, text2, 0, head->first_free) == -1)
-				{return -1;}
-		}
-		// Reception avec type negatif
-		else if(j == 1){
-			// Verifie les donnees du message
-			char text0[] = "test_receptions_multiples() : ECHEC : reception avec valeur negative de type.";
-			if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], 968) == -1) {return -1;}
-
-			// Verifie les valeurs des index
-			char text[] = "test_receptions_multiples() : ECHEC : indice apres reception 2eme message.";
-			if(index_check(head, text, position1 * size_msg, position2 * size_msg, 0, (msg_nb - 1) * size_msg) == -1)
-				{ return -1; };
-
-			// Verifie la valeur des offsets (premiere et deuxieme case libre)
-			char text2[] = "test_receptions_multiples() : ECHEC : offset case libre 1 dans la file apres reception 2eme msg.";
-			if(offset_check(messages, text2, size_msg * (position2 - position1), head->first_free) == -1) {return -1;}
-
-			char text3[] = "test_receptions_multiples() : ECHEC : offset case libre 2 dans la file apres reception 2eme msg.";
-			if(offset_check(messages, text3, 0, head->last_free) == -1 ) {return -1;}
-
-		}
 		// Reception quand il n'y a pas de message de type demande (positif ou negatif), mode non bloquant
-		else if(j == 2 || j == 5 || j == 4){
+		if(j == position1 || j == position2 || j == position3){
 			char text[] = "test_receptions_multiples() : ECHEC : gestion absence message type (non bloquant).";
 			if(error_check(text, s, EAGAIN) == -1) {return -1;}
 		}
@@ -347,11 +406,22 @@ int test_receptions_multiples(MESSAGE* file, int msg_nb){
 			// Verifie les donnees des messages
 			char text0[] = "test_receptions_multiples() : ECHEC : reception multiples.";
 			if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], type) == -1) {return -1;}
+
+			// Verifie les offsets (case lue et case precedente)
+			char text1[] = "test_receptions_multiples() : ECHEC : offset derniere case lue.";
+			if(j > 6 && offset_check(messages, text1, 0, size_msg * j) == -1) {return -1;}
+
+			char text2[] = "test_receptions_multiples() : ECHEC : offset precedente case lue.";
+			if(j > 6 && offset_check(messages, text2, size_msg, size_msg * (j-1)) == -1) {return -1;}
 		}
 	}
+	if(test_receptions_multiples_fin(head, messages, msg_nb, size_msg, position1, position2, position3) == -1)
+		{return -1;}
+
 	printf("test_receptions_multiples() : OK\n\n");
 	return 0;
 }
+
 
 int main(int argc, const char * argv[]) {
 	printf("\n\n");
