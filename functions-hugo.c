@@ -105,51 +105,6 @@ int private_or_shared(const char *nom){
 	return MAP_SHARED;
 }
 
-/*MESSAGE *m_connexion(const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
-	// ne verifie pas le partage de memoire Anonyme
-
-	MESSAGE *msg = malloc(sizeof(MESSAGE));
-
-	size_t len_name = sizeof(nom); // debug : est ce que le champ nom est utile ?
-	assert(len_name<LEN_NAME);
-
-	int fd = shm_open(nom, options, mode);
-	if( fd == -1 ){ perror("shm_open"); exit(1);}
-	if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
-	struct stat bufStat;
-	fstat(fd, &bufStat);
-
-	int prot = build_prot(options);
-	int map_flag = private_or_shared(nom);
-	line *addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
-	if( (void*) addr == MAP_FAILED) {
-		perror("Function mmap()");
-		exit(EXIT_FAILURE);
-	}
-
-	memcpy(msg->name, nom, len_name);
-	msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
-	msg->flag = options;
-	msg->shared_memory = addr;
-
-	msg->shared_memory->head.max_length_message = len_max;
-	msg->shared_memory->head.pipe_capacity = nb_msg;
-	msg->shared_memory->head.first_occupied = -1;
-	msg->shared_memory->head.last_occupied = -1;
-	msg->shared_memory->head.first_free = 0;
-	msg->shared_memory->head.last_free = 0;
-
-	// La place disponible pour un message
-	((mon_message*)msg->shared_memory->messages)[0].length = msg->memory_size;
-	((mon_message*)msg->shared_memory->messages)[0].offset = 0;
-
-	if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
-	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
-	if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
-
-	return msg;
-}*/
-
 // nom doit commencer par un unique /
 //size_t nb_msg, size_t len_max, mode_t mode
 MESSAGE *m_connexion(const char *nom, int options, ...){
@@ -182,6 +137,7 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 		int prot = build_prot(options);
 		int map_flag = private_or_shared(nom);
 		addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
+
 		if( (void*) addr == MAP_FAILED) {
 			perror("Function mmap()");
 			exit(EXIT_FAILURE);

@@ -339,6 +339,7 @@ int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int
 	return 0;
 }
 
+
 // Teste la reception avec type negatif
 int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1, int position2){
 	struct header *head = &file->shared_memory->head;
@@ -421,6 +422,14 @@ int test_receptions_multiples(MESSAGE* file, int msg_nb){
 	printf("test_receptions_multiples() : OK\n\n");
 	return 0;
 }
+
+// Ajouter test envois multiples apres receptions multiples
+
+// plusieurs processus lancés en parallèle envoient et réceptionnent les messages
+
+// Envoie puis recoit des messages petits pour verifier qu'on peut envoyer plus que nb_msg (memoire compacte)
+// puis envoie des messages plus gros : verifier que la fonction fct_met_tout_a_droite fonctionne
+
 
 
 int main(int argc, const char * argv[]) {
