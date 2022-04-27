@@ -4,6 +4,36 @@
 
 int t[4] = {-12, 99, 134, 543};
 
+// Ajouter test envois multiples apres receptions multiples
+
+// plusieurs processus lancés en parallèle envoient et réceptionnent les messages
+
+// Envoie puis recoit des messages petits pour verifier qu'on peut envoyer plus que nb_msg (memoire compacte)
+// puis envoie des messages plus gros : verifier que la fonction fct_met_tout_a_droite fonctionne
+
+
+
+int main(int argc, const char * argv[]) {
+	printf("\n\n");
+	test_connexion();
+	test_envoi_erreurs();
+	test_reception_erreurs();
+
+	MESSAGE* file = m_connexion("/envoi", O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	test_envoi(file);
+	test_reception(file);
+
+	int msg_nb = 22; // msg_nb doit etre compris entre 7 (pour les tests) et 22 (segmentation fault car 'type' devient trop grand)
+	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	test_envois_multiples(file2, msg_nb);
+	test_receptions_multiples(file2, msg_nb);
+
+	return EXIT_SUCCESS;
+}
+
+
+
+
 // Verifie les valeurs du message recu (type, length, etc.)
 int reception_check(mon_message *m1, char text[], ssize_t s, ssize_t size, size_t length, int value2, long type){
 	if(s != size || m1->length != length || ((int*)m1->mtext)[2] != value2 || m1->type != type){
@@ -245,6 +275,8 @@ int test_reception_erreurs(){
 		{return -1;}
 	*/
 
+	// Test reception si la longueur de la memoire a l'adresse msg est plus petite que le message a lire
+
 	printf("test_reception_erreurs() : OK\n\n");
 	return 0;
 }
@@ -275,6 +307,64 @@ int test_reception(MESSAGE* file){
 		{return -1;}
 
 	printf("test_reception() : OK\n\n");
+	return 0;
+}
+
+
+// Test m_reception en tentant de lire plusieurs messages en utilisant des valeurs positives et negatives de type
+// Types dans la file : 1001, 998, 1004, 992, 1016, 968, 1064, 872, 1256, 488, 2024, 1048, 5096, 7192...
+// Lit d'abord le message 1004 (type = 1004), puis 968 (type = -970)
+// Puis lit dans l'ordre les cases suivantes a partir de 992
+// Exception : le 5eme essai utilise type = -2 et donc echoue (la case 1016 n'est donc pas lue)
+// A la fin les cases qui sont toujours occupees sont les cases 0 (1001), 1 (998), 4 (1016)
+int test_receptions_multiples(MESSAGE* file, int msg_nb){
+	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
+	struct header *head = &file->shared_memory->head;
+	mon_message *messages = (mon_message *)file->shared_memory->messages;
+	struct mon_message *m1 = malloc(size_msg);
+	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
+	int position1 = 2; // position of message with type 1004
+	int position2 = 5; // position of message with type 968
+	int position3 = 4; // position of message with type 1016
+
+	// Teste reception avec un type strictement positif
+	if(test_reception_type_pos(file, m1, size_msg, msg_nb, position1) == -1) {return -1;}
+
+	// Teste reception avec un type strictement negatif
+	if(test_reception_type_neg(file, m1, size_msg, msg_nb, position1, position2) == -1) {return -1;}
+
+	// Receptions multiples alors qu'il y a bien des messages dans la file
+	for(int j = 2; j < msg_nb; j++){
+		long type;
+		if(j == 4){ type = -2; }
+		else{ type = abs((long) 1000 + pow(-2.0,(double) j)); }
+
+		ssize_t s = m_reception(file, m1, sizeof(t), type, O_NONBLOCK);
+
+		// Reception quand il n'y a pas de message de type demande (positif ou negatif), mode non bloquant
+		if(j == position1 || j == position2 || j == position3){
+			char text[] = "test_receptions_multiples() : ECHEC : gestion absence message type (non bloquant).";
+			if(error_check(text, s, EAGAIN) == -1) {return -1;}
+		}
+
+		// Reception des autres messages
+		else{
+			// Verifie les donnees des messages
+			char text0[] = "test_receptions_multiples() : ECHEC : reception multiples.";
+			if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], type) == -1) {return -1;}
+
+			// Verifie les offsets (case lue et case precedente)
+			char text1[] = "test_receptions_multiples() : ECHEC : offset derniere case lue.";
+			if(j > 6 && offset_check(messages, text1, 0, size_msg * j) == -1) {return -1;}
+
+			char text2[] = "test_receptions_multiples() : ECHEC : offset precedente case lue.";
+			if(j > 6 && offset_check(messages, text2, size_msg, size_msg * (j-1)) == -1) {return -1;}
+		}
+	}
+	if(test_receptions_multiples_fin(head, messages, msg_nb, size_msg, position1, position2, position3) == -1)
+		{return -1;}
+
+	printf("test_receptions_multiples() : OK\n\n");
 	return 0;
 }
 
@@ -364,88 +454,4 @@ int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int
 	if(offset_check(messages, text3, 0, head->last_free) == -1 ) {return -1;}
 
 	return 0;
-}
-
-// Test m_reception en tentant de lire plusieurs messages en utilisant des valeurs positives et negatives de type
-// Types dans la file : 1001, 998, 1004, 992, 1016, 968, 1064, 872, 1256, 488, 2024, 1048, 5096, 7192...
-// Lit d'abord le message 1004 (type = 1004), puis 968 (type = -970)
-// Puis lit dans l'ordre les cases suivantes a partir de 992
-// Exception : le 5eme essai utilise type = -2 et donc echoue (la case 1016 n'est donc pas lue)
-// A la fin les cases qui sont toujours occupees sont les cases 0 (1001), 1 (998), 4 (1016)
-int test_receptions_multiples(MESSAGE* file, int msg_nb){
-	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
-	struct header *head = &file->shared_memory->head;
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
-	struct mon_message *m1 = malloc(size_msg);
-	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
-	int position1 = 2; // position of message with type 1004
-	int position2 = 5; // position of message with type 968
-	int position3 = 4; // position of message with type 1016
-
-	// Teste reception avec un type strictement positif
-	if(test_reception_type_pos(file, m1, size_msg, msg_nb, position1) == -1) {return -1;}
-
-	// Teste reception avec un type strictement negatif
-	if(test_reception_type_neg(file, m1, size_msg, msg_nb, position1, position2) == -1) {return -1;}
-
-	// Receptions multiples alors qu'il y a bien des messages dans la file
-	for(int j = 2; j < msg_nb; j++){
-		long type;
-		if(j == 4){ type = -2; }
-		else{ type = abs((long) 1000 + pow(-2.0,(double) j)); }
-
-		ssize_t s = m_reception(file, m1, sizeof(t), type, O_NONBLOCK);
-
-		// Reception quand il n'y a pas de message de type demande (positif ou negatif), mode non bloquant
-		if(j == position1 || j == position2 || j == position3){
-			char text[] = "test_receptions_multiples() : ECHEC : gestion absence message type (non bloquant).";
-			if(error_check(text, s, EAGAIN) == -1) {return -1;}
-		}
-
-		// Reception des autres messages
-		else{
-			// Verifie les donnees des messages
-			char text0[] = "test_receptions_multiples() : ECHEC : reception multiples.";
-			if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], type) == -1) {return -1;}
-
-			// Verifie les offsets (case lue et case precedente)
-			char text1[] = "test_receptions_multiples() : ECHEC : offset derniere case lue.";
-			if(j > 6 && offset_check(messages, text1, 0, size_msg * j) == -1) {return -1;}
-
-			char text2[] = "test_receptions_multiples() : ECHEC : offset precedente case lue.";
-			if(j > 6 && offset_check(messages, text2, size_msg, size_msg * (j-1)) == -1) {return -1;}
-		}
-	}
-	if(test_receptions_multiples_fin(head, messages, msg_nb, size_msg, position1, position2, position3) == -1)
-		{return -1;}
-
-	printf("test_receptions_multiples() : OK\n\n");
-	return 0;
-}
-
-// Ajouter test envois multiples apres receptions multiples
-
-// plusieurs processus lancés en parallèle envoient et réceptionnent les messages
-
-// Envoie puis recoit des messages petits pour verifier qu'on peut envoyer plus que nb_msg (memoire compacte)
-// puis envoie des messages plus gros : verifier que la fonction fct_met_tout_a_droite fonctionne
-
-
-
-int main(int argc, const char * argv[]) {
-	printf("\n\n");
-	test_connexion();
-	test_envoi_erreurs();
-	test_reception_erreurs();
-
-	MESSAGE* file = m_connexion("/envoi", O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
-	test_envoi(file);
-	test_reception(file);
-
-	int msg_nb = 22; // msg_nb doit etre compris entre 7 (pour les tests) et 22 (segmentation fault car 'type' devient trop grand)
-	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
-	test_envois_multiples(file2, msg_nb);
-	test_receptions_multiples(file2, msg_nb);
-
-	return EXIT_SUCCESS;
 }
