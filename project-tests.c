@@ -89,6 +89,7 @@ int error_check(char text[], ssize_t s, int error){
 
 // Teste la fonction m_connexion
 int test_connexion(){
+	printf("DEBUT test_connexion()\n");
 	char name[] = "/kangourouqkdjnqkdjfnqlfn";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
@@ -124,7 +125,7 @@ int test_connexion(){
 	// debug : tester la connexion quand existe deja + le rejet quand existe deja et O_EXECL
 	// debug : tester la connexion a une file anonyme par un processus enfant
 
-	printf("test_connexion() : OK\n\n");
+	printf("FIN test_connexion()\n\n");
 	return 0;
 }
 

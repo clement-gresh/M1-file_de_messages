@@ -79,6 +79,10 @@ int m_reception_erreurs(MESSAGE *file, int flags);
 void m_reception_occupees(MESSAGE *file, int current);
 void m_reception_libres(MESSAGE *file, int current);
 int m_reception_recherche(MESSAGE *file, long type, int flags);
+int is_o_creat(int options);
+int private_or_shared(const char *nom);
+int build_prot(int options);
+int BitAt(long unsigned int x, int i);
 
 
 // FONCTIONS DE TEST
