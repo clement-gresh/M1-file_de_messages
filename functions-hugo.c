@@ -87,15 +87,21 @@ int build_prot(int options){
 }
 
 int is_o_creat(int options){
-	int options_i=0;
-	size_t len_int = sizeof(int);
-
-	for(int i=0;i<len_int;i++){
-		if((options_i==BitAt(O_CREAT,i))==1){
-			return 1;
-		}
+	int k=0;
+	int creat = O_CREAT;
+	while(creat!=0){
+		k++;
+		creat>>=1;
 	}
-	return 0;
+	k--;
+	return (options>>k)&1;
+}
+
+int is_o_rdonly(int options){
+	if((options>>1)&1){
+		return 0;
+	}
+	return !(options&1);
 }
 
 int private_or_shared(const char *nom){
@@ -113,19 +119,25 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 	line *addr = NULL;
 
     if(is_o_creat(options)){ //il faut le creer s'il n'existe pas
+    	if(is_o_rdonly(options)){
+    		// on empêche de créer un fichier vituelle en lecture seulement
+    		return NULL;
+    	}
     	va_list parametersInfos;
     	va_start(parametersInfos, options);
 
     	size_t nb_msg = va_arg(parametersInfos, size_t);
     	size_t len_max = va_arg(parametersInfos, size_t);
     	mode_t mode = va_arg(parametersInfos, mode_t);
-
+    	printf("je suis rentré\n");
 		msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
 		msg->flag = options;
 
 		int fd = shm_open(nom, options, mode);
 		if( fd == -1 ){ perror("shm_open"); exit(1);}
+		printf("je suis là\n");
 		if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
+		printf("je suis plus là\n");
 		struct stat bufStat;
 		fstat(fd, &bufStat);
 		//printf("ici _n\n"); debug
