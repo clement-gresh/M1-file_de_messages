@@ -19,8 +19,6 @@
 #define UNLOCK true
 #define NO_UNLOCK false
 
-#define LEN_NAME 32
-
 // STRUCTURES
 typedef struct mon_message{
 	long type;
@@ -47,7 +45,6 @@ typedef struct line{
 } line;
 
 typedef struct MESSAGE{
-	char name[LEN_NAME]; // on le met dans le doute
 	size_t memory_size;
 	int flag;
 	line* shared_memory;

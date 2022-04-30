@@ -110,10 +110,6 @@ int private_or_shared(const char *nom){
 MESSAGE *m_connexion(const char *nom, int options, ...){
 
 	MESSAGE *msg = malloc(sizeof(MESSAGE));
-
-	size_t len_name = sizeof(nom); // debug : est ce que le champ nom est utile ?
-	assert(len_name<LEN_NAME);
-
 	line *addr = NULL;
 
     if(is_o_creat(options)){ //il faut le creer s'il n'existe pas
@@ -124,7 +120,6 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     	size_t len_max = va_arg(parametersInfos, size_t);
     	mode_t mode = va_arg(parametersInfos, mode_t);
 
-    	memcpy(msg->name, nom, len_name);
 		msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
 		msg->flag = options;
 
@@ -178,7 +173,6 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 			exit(EXIT_FAILURE);
 		}
 
-		memcpy(msg->name, nom, len_name);
 		msg->memory_size = sizeof(header) + addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
 		msg->flag = options;
 		msg->shared_memory = addr;

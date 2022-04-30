@@ -33,7 +33,6 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	struct mon_message *messages = (mon_message *)file->shared_memory->messages;
 	struct header *head = &file->shared_memory->head;
 	size_t msg_size = sizeof(mon_message) + len;
-
 	// Verification de l'absence d'erreurs dans les paramtres d'appel
 	if(m_envoi_erreurs(file, len, msgflag) != 0){ return -1; }
 
