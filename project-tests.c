@@ -14,7 +14,7 @@ int t[4] = {-12, 99, 134, 543};
 
 
 int main(int argc, const char * argv[]) {
-	printf("\n\n");
+	printf("\n");
 	test_connexion();
 	test_envoi_erreurs();
 	test_reception_erreurs();
@@ -88,29 +88,28 @@ int error_check(char text[], ssize_t s, int error){
 
 
 // Teste la fonction m_connexion
-int test_connexion(){
-	printf("DEBUT test_connexion()\n");
-	char name[] = "/kangourouqkdjnqkdjfnqlfn";
+int sous_test_connextion_1(){
+		char name[] = "/nonorouqkdjnqkdjfnqlfn";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	struct header *head = &file->shared_memory->head;
 
-	// Verifie dans la file les attributs nom, nombre de messages et longueur max d'un message
-	if(strcmp(file->name, name) != 0 || head->pipe_capacity != msg_nb
-			|| head->max_length_message != max_message_length){
-		printf("test_connexion() : ECHEC : Header attribute error\n");
-		printf("Given name : %s.  Target pipe capacity : %d. Target max message length : %ld.\n",
-				name, 12, max_message_length);
-		printf("Actual name : %s.  Actual pipe capacity : %d. Actual max message length : %ld.\n",
-				file->name, head->pipe_capacity, head->max_length_message);
-		printf("\n");
-		// return -1; // debug
-	}
+	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
 
+	if(head->pipe_capacity != msg_nb){
+		printf("Target pipe capacity : %d != %d.\n", head->pipe_capacity, msg_nb);
+		printf("sous_test_connexion_1() : ECHEC : erreur pipe_capacity\n");
+		return -1;
+	}
+	if(head->max_length_message != max_message_length){
+		printf("Actual max message length : %ld != %ld.\n", head->max_length_message , max_message_length);
+		printf("sous_test_connexion1() : ECHEC : erreur max_length_message\n");
+		return -1;
+	}
 	// Verifie la memoire allouee
 	if(file->memory_size != sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb){
-		printf("test_connexion() : ECHEC : erreur allocation memoire\n");
+		printf("sous_test_connexion_1() : ECHEC : erreur allocation memoire\n");
 		printf("Target memory size : %ld\n", sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb);
 		printf("Actual memory size : %ld\n", file->memory_size);
 		printf("\n");
@@ -118,20 +117,62 @@ int test_connexion(){
 	}
 
 	// Verifie l'initialisation des index du tableau de message
-	if(index_check(head, "test_connexion() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+	if(index_check(head, "sous_test_connexion_1() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+	printf("sous_test_connexion_1() : OK\n");
+	return 0;
+}
+
+int sous_test_connextion_2(){
+	char name[] = "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+	int msg_nb = 12;
+	size_t max_message_length = sizeof(char)*20;
+	MESSAGE* file = m_connexion(name, O_RDONLY | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
+	struct header *head = &file->shared_memory->head;
+
+	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
+
+	if(head->pipe_capacity != msg_nb){
+		printf("Target pipe capacity : %d != %d.\n", head->pipe_capacity, msg_nb);
+		printf("sous_test_connexion_2() : ECHEC : erreur pipe_capacity\n");
+		return -1;
+	}
+	if(head->max_length_message != max_message_length){
+		printf("Actual max message length : %ld != %ld.\n", head->max_length_message , max_message_length);
+		printf("sous_test_connexion_2() : ECHEC : erreur max_length_message\n");
+		return -1;
+	}
+	// Verifie la memoire allouee
+	if(file->memory_size != sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb){
+		printf("sous_test_connexion_2() : ECHEC : erreur allocation memoire\n");
+		printf("Target memory size : %ld\n", sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb);
+		printf("Actual memory size : %ld\n", file->memory_size);
+		printf("\n");
+		return -1;
+	}
+
+	// Verifie l'initialisation des index du tableau de message
+	if(index_check(head, "sous_test_connexion_2() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+	printf("sous_test_connexion_2() : OK\n");
+	return 0;
+}
+
+int test_connexion(){
+	sous_test_connextion_1();
+	sous_test_connextion_2();
 
 	// debug : Tester les droits (O_RDWR et S_IRWXU)
 	// debug : tester les droits avec differentes valeurs
 	// debug : tester la connexion quand existe deja + le rejet quand existe deja et O_EXECL
 	// debug : tester la connexion a une file anonyme par un processus enfant
 
-	printf("FIN test_connexion()\n\n");
+	printf("test_connexion() : OK\n\n");
 	return 0;
 }
 
 
 // Teste la bonne gestion des erreurs dans m_envoi
 int test_envoi_erreurs(){
+
 	struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
 	m->type = (long) getpid();
@@ -140,11 +181,8 @@ int test_envoi_erreurs(){
 	// Test envoi d'un message trop long
 	size_t small_size = sizeof(t) - sizeof(char);
 	MESSAGE* file2 = m_connexion("/envoi_erreurs_2", O_RDWR | O_CREAT, 5, small_size, S_IRWXU | S_IRWXG | S_IRWXO);
-
 	int i = m_envoi( file2, m, sizeof(t), O_NONBLOCK);
 	if(error_check("test_envoi_erreurs() : ECHEC : gestion envoi d'un message trop long.", i, EMSGSIZE) == -1) {return -1;}
-
-
 	// Test envoi avec mauvai drapeau
 	MESSAGE* file3 = m_connexion("/envoi_erreurs_3", O_RDWR | O_CREAT, 5, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 
