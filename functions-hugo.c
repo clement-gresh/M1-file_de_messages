@@ -171,10 +171,9 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     }
     else if(!is_o_creat(options) && nom!=NULL){ // il existe
     	MESSAGE *msg = malloc(sizeof(MESSAGE));
-
+    	printf("je suis ici\n");
 		int fd = shm_open(nom, options, 0);
 		if( fd == -1 ){ perror("shm_open"); exit(1);}
-		if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
 		struct stat bufStat;
 		fstat(fd, &bufStat);
 

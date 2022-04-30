@@ -93,6 +93,10 @@ int sous_test_connextion_1(){
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
+	if(file == NULL){
+		printf("sous_test_connexion1() : ECHEC : NULL\n");
+		return -1;
+	}
 	struct header *head = &file->shared_memory->head;
 
 	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
@@ -126,39 +130,30 @@ int sous_test_connextion_2(){
 	char name[] = "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
-	MESSAGE* file = m_connexion(name, O_RDONLY | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
-	struct header *head = &file->shared_memory->head;
-
-	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
-
-	if(head->pipe_capacity != msg_nb){
-		printf("Target pipe capacity : %d != %d.\n", head->pipe_capacity, msg_nb);
-		printf("sous_test_connexion_2() : ECHEC : erreur pipe_capacity\n");
+	MESSAGE* file = m_connexion(name, O_RDONLY | O_CREAT, msg_nb, max_message_length, 0);
+	if(file != NULL){
+		printf("sous_test_connexion2() : ECHEC : file != NULL\n");
 		return -1;
 	}
-	if(head->max_length_message != max_message_length){
-		printf("Actual max message length : %ld != %ld.\n", head->max_length_message , max_message_length);
-		printf("sous_test_connexion_2() : ECHEC : erreur max_length_message\n");
-		return -1;
-	}
-	// Verifie la memoire allouee
-	if(file->memory_size != sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb){
-		printf("sous_test_connexion_2() : ECHEC : erreur allocation memoire\n");
-		printf("Target memory size : %ld\n", sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb);
-		printf("Actual memory size : %ld\n", file->memory_size);
-		printf("\n");
-		return -1;
-	}
-
-	// Verifie l'initialisation des index du tableau de message
-	if(index_check(head, "sous_test_connexion_2() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+	
 	printf("sous_test_connexion_2() : OK\n");
+	return 0;
+}
+
+int sous_test_connextion_3(){
+		char name[] = "/nonorouqkdjnqkdjfnqlfn";
+	MESSAGE* file = m_connexion(name, O_RDONLY);
+	if(file == NULL){
+		printf("sous_test_connexion3() : ECHEC : NULL\n");
+		return -1;
+	}
 	return 0;
 }
 
 int test_connexion(){
 	sous_test_connextion_1();
 	sous_test_connextion_2();
+	//sous_test_connextion_3();
 
 	// debug : Tester les droits (O_RDWR et S_IRWXU)
 	// debug : tester les droits avec differentes valeurs
