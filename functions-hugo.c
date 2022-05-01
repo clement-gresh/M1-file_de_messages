@@ -56,33 +56,21 @@ int BitAt(long unsigned int x, int i){
 }
 
 int build_prot(int options){
-	int options_i=0;
 	int prot = 0;
-	size_t len_int = sizeof(int);
 
-	for(int i=0;i<len_int;i++){
-		options_i = BitAt(options_i,i);
-		if((options_i==BitAt(O_WRONLY,i))==1){
-			//opt_wr = 1;
-			prot= prot | PROT_WRITE;
-		}
-		if((options_i==BitAt(O_RDONLY,i))==1){
-			//opt_rd = 1;
-			prot = prot | PROT_READ;
-		}
-		if((options_i==BitAt(O_RDWR,i))==1){
-			//opt_rdwr = 1;
-			prot = prot | PROT_READ | PROT_WRITE;
-		}
-		if((options_i==BitAt(O_EXCL,i))==1){
-			//opt_excl = 1;
-			prot = prot | PROT_EXEC;
-		}
-		if((options_i==BitAt(O_CREAT,i))==1){
-			//opt_creat = 1;
-		}
+	if(is_o_excl(options)){
+		prot |= PROT_EXEC;
 	}
 
+	if(is_o_rdwr(options)){
+		prot |= PROT_READ | PROT_WRITE;
+	}
+	else if(is_o_rdonly(options)){
+		prot |= PROT_READ;
+	}
+	else if(is_o_wronly(options)){
+		prot |= PROT_WRITE;
+	}
 	return prot;
 }
 
@@ -98,15 +86,37 @@ int is_o_creat(int options){
 }
 
 int is_o_rdonly(int options){
-	if((options>>1)&1){
+	if( is_o_rdwr(options) ){
 		return 0;
 	}
 	return !(options&1);
 }
 
+int is_o_wronly(int options){
+	if( is_o_rdwr(options) ){
+		return 0;
+	}
+	return options&1;
+}
+
+int is_o_rdwr(int options){
+	return (options>>1)&1;
+}
+
+int is_o_excl(int options){
+	int k=0;
+	int excl = O_EXCL;
+	while(excl!=0){
+		k++;
+		excl>>=1;
+	}
+	k--;
+	return (options>>k)&1;
+}
+
 int private_or_shared(const char *nom){
 	if(nom==NULL){
-		return MAP_PRIVATE;
+		return MAP_SHARED | MAP_ANON;
 	}
 	return MAP_SHARED;
 }
@@ -129,18 +139,15 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     	size_t nb_msg = va_arg(parametersInfos, size_t);
     	size_t len_max = va_arg(parametersInfos, size_t);
     	mode_t mode = va_arg(parametersInfos, mode_t);
-    	printf("je suis rentré\n");
 		msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
 		msg->flag = options;
 
 		int fd = shm_open(nom, options, mode);
 		if( fd == -1 ){ perror("shm_open"); exit(1);}
-		printf("je suis là\n");
 		if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
-		printf("je suis plus là\n");
 		struct stat bufStat;
 		fstat(fd, &bufStat);
-		//printf("ici _n\n"); debug
+
 		int prot = build_prot(options);
 		int map_flag = private_or_shared(nom);
 		addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
@@ -171,7 +178,6 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     }
     else if(!is_o_creat(options) && nom!=NULL){ // il existe
     	MESSAGE *msg = malloc(sizeof(MESSAGE));
-    	printf("je suis ici\n");
 		int fd = shm_open(nom, options, 0);
 		if( fd == -1 ){ perror("shm_open"); exit(1);}
 		struct stat bufStat;
