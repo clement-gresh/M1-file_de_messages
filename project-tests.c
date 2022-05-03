@@ -13,6 +13,72 @@ int t[4] = {-12, 99, 134, 543};
 
 
 
+// Teste que les messages sont compactes en envoyant des messages plus petits que la taille maximum autorisee
+int test_compact_messages(){
+	int u[1] = {45};
+	int small_msg_size = sizeof(struct mon_message) + sizeof(u);
+	int big_msg_size = sizeof(struct mon_message) + sizeof(t);
+	int big_msg_nb= 20;
+	MESSAGE* file = m_connexion("/test_compact", O_RDWR | O_CREAT, big_msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+
+	struct header *head = &file->shared_memory->head;
+	mon_message *messages = (mon_message *)file->shared_memory->messages;
+
+	struct mon_message *m = malloc(sizeof(struct mon_message) + sizeof(u));
+	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
+
+	m->type = (long) getpid();
+	memmove( m->mtext, u, sizeof(u));
+
+	// Nombre de petits messages pouvant etre stockes dans la file
+	int small_msg_nb = (int) floor(big_msg_size * big_msg_nb / small_msg_size);
+
+	// Test envoi du nombre maximal de petits messages
+	for(int j = 0; j < small_msg_nb; j++){
+		if( m_envoi( file, m, sizeof(u), 0) != 0 ){
+			printf("test_compact_messages() : ECHEC : envoie de %d petits message.\n", small_msg_nb); return -1;
+		}
+
+		// Verifie les valeurs des index tant que le tableau n'est pas plein
+		if(small_msg_size * (j+2) <= file->memory_size - sizeof(header)){
+			char text[] = "test_compact_messages() : ECHEC : indice envois multiples.";
+			if(index_check(head, text, small_msg_size * (j+1), small_msg_size * (j+1), 0, small_msg_size * (j)) == -1)
+				{ return -1; };
+		}
+		// Verifie les valeurs des index quand le tableau est plein
+		else{
+			char text[] = "test_compact_messages() : ECHEC : indice apres envoi dernier message.";
+			if(index_check(head, text, -1, -1, 0, small_msg_size * (j)) == -1) { return -1; };
+		}
+	}
+
+	// Verifie les offsets dans la file
+	for(int j = 0; j < small_msg_nb; j++){
+		if(j != small_msg_nb-1
+				&& offset_check(messages, "test_compact_messages() : ECHEC : offset.", small_msg_nb, j*small_msg_nb) == -1)
+			{ return -1; }
+
+		else if(j == small_msg_nb-1
+				&& offset_check(messages, "test_compact_messages() : ECHEC : offset dernier message.", 0, j*small_msg_nb) == -1)
+			{ return -1; }
+	}
+
+	// Test : envoi en mode non bloquant SANS place
+	for(int j = 0; j < 2; j++){
+		int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
+		char text[] = "test_compact_messages() : ECHEC : gestion envoi dans un tableau plein (mode non bloquant).";
+
+		if(error_check(text, i, EAGAIN) == -1) {return -1;}
+	}
+	// DEBUG : peut probablement factoriser toute les envois avec test_envois_multiples
+
+	printf("test_compact_messages() : OK\n\n");
+	return 0;
+}
+
+
+
+
 int main(int argc, const char * argv[]) {
 	printf("\n");
 	test_connexion();
@@ -27,6 +93,7 @@ int main(int argc, const char * argv[]) {
 	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
+	test_compact_messages();
 
 	return EXIT_SUCCESS;
 }
@@ -351,7 +418,7 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 
 		// Verifie les valeurs des index tant que le tableau n'est pas plein
 		if(size_msg * (j+2) <= file->memory_size - sizeof(header)){
-			char text[] = "test_envois_multiples() : ECHEC : indice envoi multiple.";
+			char text[] = "test_envois_multiples() : ECHEC : indice envois multiples.";
 			if(index_check(head, text, size_msg * (j+1), size_msg * (j+1), 0, size_msg * (j)) == -1) { return -1; };
 		}
 		// Verifie les valeurs des index quand le tableau est plein
@@ -373,7 +440,7 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 	// Test : envoi en mode non bloquant SANS place
 	for(int j = 0; j < 3; j++){
 		int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
-		char text[] = "test_envois_multiples() : ECHEC : gestion envoi n %d dans un tableau plein (mode non bloquant).";
+		char text[] = "test_envois_multiples() : ECHEC : gestion envoi n dans un tableau plein (mode non bloquant).";
 
 		if(error_check(text, i, EAGAIN) == -1) {return -1;}
 	}
