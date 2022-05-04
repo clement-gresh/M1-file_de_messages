@@ -20,7 +20,21 @@
 #define UNLOCK true
 #define NO_UNLOCK false
 
+#define RECORD_NB 5
+#define TYPE_SEARCH_NB 100
+
 // STRUCTURES
+typedef struct record{ // debug : pas FIFO
+	pid_t pid;
+	int signal;
+	long type;
+} record;
+
+typedef struct type_search{
+	int number;
+	long type;
+} type_search;
+
 typedef struct mon_message{
 	long type;
 	size_t length;
@@ -38,6 +52,8 @@ typedef struct header{
 	pthread_mutex_t mutex;
 	pthread_cond_t rcond;
 	pthread_cond_t wcond;
+	record records[RECORD_NB];
+	type_search types_searched[TYPE_SEARCH_NB];
 } header;
 
 typedef struct line{
@@ -98,11 +114,11 @@ int test_envoi(MESSAGE* file);
 int test_envois_multiples(MESSAGE* file, int msg_nb);
 int test_reception_erreurs();
 int test_reception(MESSAGE* file);
-int test_receptions_multiples_fin(header *head, mon_message *messages, int msg_nb, size_t size_msg,
-		int position1, int position2, int position3);
+int test_receptions_multiples(MESSAGE* file, int msg_nb);
 int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1);
 int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1, int position2);
-int test_receptions_multiples(MESSAGE* file, int msg_nb);
-
+int test_receptions_multiples_fin(header *head, mon_message *messages, int msg_nb, size_t size_msg,
+		int position1, int position2, int position3);
+int test_compact_messages();
 
 #endif /* M_FILE_H_ */

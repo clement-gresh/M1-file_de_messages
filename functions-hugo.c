@@ -139,7 +139,8 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     	size_t nb_msg = va_arg(parametersInfos, size_t);
     	size_t len_max = va_arg(parametersInfos, size_t);
     	mode_t mode = va_arg(parametersInfos, mode_t);
-		msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
+		msg->memory_size = sizeof(header) + sizeof(record) * RECORD_NB + sizeof(type_search) * TYPE_SEARCH_NB
+				+ nb_msg * (len_max * sizeof(char) + sizeof(mon_message)); // debug : memory_size - sizeof(header)
 		msg->flag = options;
 
 		int fd = shm_open(nom, options, mode);
@@ -165,13 +166,18 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 		msg->shared_memory->head.first_free = 0;
 		msg->shared_memory->head.last_free = 0;
 
-		// La place disponible pour un message
-		((mon_message*)msg->shared_memory->messages)[0].length = msg->memory_size - sizeof(header);
+		// La place disponible pour les messages
+		((mon_message*)msg->shared_memory->messages)[0].length = nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
 		((mon_message*)msg->shared_memory->messages)[0].offset = 0;
 
+		// Initialisation du mutex et des conditions
 		if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
 		if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
 		if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
+
+		// Initialisations des tableaux pour les notifications
+		for(int i = 0; i < RECORD_NB; i++){ msg->shared_memory->head.records[i].pid = -1; }
+		for(int i = 0; i < TYPE_SEARCH_NB; i++){ msg->shared_memory->head.types_searched[i].number = 0; }
 
 		va_end(parametersInfos);
 
@@ -211,6 +217,13 @@ int m_deconnexion(MESSAGE *file){
 int m_destruction(const char *nom){
 	return shm_unlink(nom);
 }
+
+/*
+debug
+Unmap the shared memory with munmap().
+Close the shared memory object with close().
+Delete the shared memory object with shm_unlink().
+ */
 
 int initialiser_mutex(pthread_mutex_t *pmutex){
 	pthread_mutexattr_t mutexattr;

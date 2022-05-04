@@ -1,6 +1,37 @@
 #include "m_file.h"
 
 // <>
+/*
+
+int m_enregistrement(MESSAGE *file, long type, int sig){
+	struct header *head = &file->shared_memory->head;
+	int current = 0;
+
+	while(current < RECORD_NB && head->records[current].occupied == true){
+		current = current + 1;
+	}
+	if(current != RECORD_NB){
+		head->records[current].occupied = true;
+		head->records[current].pid = getpid();
+		head->records[current].signal = sig;
+		head->records[current].type = type;
+		return 0;
+	}
+	return -1;
+}
+
+void m_annulation(MESSAGE *file){
+	struct header *head = &file->shared_memory->head;
+
+	for(int i = 0; i < RECORD_NB; i++){
+		if(head->records[i].pid == getpid()) {
+			head->records[i].occupied = false;
+		}
+	}
+}
+*/
+
+// debug : maj des LC des cases libres et occupees sont symetriques. Peut probablement les factoriser dans une seule fonction
 
 int enough_space(MESSAGE *file, size_t len){
 	mon_message *messages = (mon_message *)file->shared_memory->messages;
@@ -176,6 +207,7 @@ void m_envoi_libres(MESSAGE *file, int current, size_t len){
 
 	// Si current a assez de place libre pour stocker ce message plus un autre
 	if(free_space > sizeof(mon_message)){
+
 		// "Creation" de next
 		int next = current + msg_size;
 		messages[next].length = current_length - msg_size;
@@ -298,7 +330,7 @@ void m_reception_occupees(MESSAGE *file, int current){
 }
 
 
-// Maj de la liste chainee des cases occlibresupees dans m_reception
+// Maj de la liste chainee des cases libres dans m_reception
 void m_reception_libres(MESSAGE *file, int current){
 	struct mon_message *messages = (mon_message *)file->shared_memory->messages;
 	struct header *head = &file->shared_memory->head;
