@@ -27,12 +27,9 @@ int test_processus_paralleles(){
 
 int main(int argc, const char * argv[]) {
 	printf("\n");
-	printf("\nkikou\n\n\n");
 	test_connexion();
 	test_envoi_erreurs();
 	test_reception_erreurs();
-
-	printf("\nkikou2\n\n\n");
 
 	MESSAGE* file = m_connexion("/envoi", O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envoi(file);
@@ -43,7 +40,6 @@ int main(int argc, const char * argv[]) {
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
 	test_compact_messages();
-	printf("\nkikou3\n\n\n");
 
 	return EXIT_SUCCESS;
 }
@@ -103,7 +99,7 @@ int error_check(char text[], ssize_t s, int error){
 
 
 // Teste la fonction m_connexion
-int sous_test_connextion_1(){
+int sous_test_connexion_1(){
 	char name[] = "/nonorouqkdjnqkdjfnqlfn";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
@@ -145,7 +141,7 @@ int sous_test_connextion_1(){
 	return 0;
 }
 
-int sous_test_connextion_2(){
+int sous_test_connexion_2(){
 	char name[] = "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
@@ -159,7 +155,7 @@ int sous_test_connextion_2(){
 	return 0;
 }
 
-int sous_test_connextion_3(){
+int sous_test_connexion_3(){
 	char name[] = "/nonorouqkdjnqkdjfnqlfn";
 	MESSAGE* file = m_connexion(name, O_RDONLY);
 	if(file == NULL){
@@ -170,7 +166,7 @@ int sous_test_connextion_3(){
 	return 0;
 }
 
-int sous_test_connextion_4(){
+int sous_test_connexion_4(){
 	char name[] = "/kangourou";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
@@ -215,7 +211,7 @@ int sous_test_connextion_4(){
 			perror("m_deconnexion");
 			return -1;
 		}
-		return 0;
+		_exit(0);
 	}
 	else{
 		if(wait(NULL)==-1){
@@ -232,7 +228,7 @@ int sous_test_connextion_4(){
 	}
 }
 
-int sous_test_connextion_5(){
+int sous_test_connexion_5(){
 	char name[] = "/nonono";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
@@ -272,11 +268,11 @@ int sous_test_connextion_5(){
 
 
 int test_connexion(){
-	sous_test_connextion_1(); //test connexion simple en O_RDWR | O_CREAT
-	sous_test_connextion_2(); //test connexion simple en O_RDONLY | O_CREAT
-	sous_test_connextion_3(); // test connexion sur un file existant
-	sous_test_connextion_4(); //tester la connexion a une file anonyme par un processus enfant
-	//sous_test_connextion_5(); //tester la connexion O_CREAT | O_EXCL test ok si on l'excécute 2 fois on a bien une erreur
+	sous_test_connexion_1(); //test connexion simple en O_RDWR | O_CREAT
+	sous_test_connexion_2(); //test connexion simple en O_RDONLY | O_CREAT
+	sous_test_connexion_3(); // test connexion sur un file existant
+	sous_test_connexion_4(); //tester la connexion a une file anonyme par un processus enfant
+	//sous_test_connexion_5(); //tester la connexion O_CREAT | O_EXCL test ok si on l'excécute 2 fois on a bien une erreur
 
 
 	// debug : Tester les droits (O_RDWR et S_IRWXU)
@@ -341,7 +337,7 @@ int test_envoi(MESSAGE* file){
 	if(index_check(head, "test_envoi() : ECHEC : indice.", -1, -1, 0, 0) == -1) { return -1; };
 
 	// Verifie la valeur de l'offset
-	if(offset_check(messages, "test_envoi() : ECHEC : offset message.", 0, 100) == -1) { return -1; };
+	if(offset_check(messages, "test_envoi() : ECHEC : offset message.", 0, 0) == -1) { return -1; };
 
 	// Test : envoi en mode non bloquant SANS place
 	int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
