@@ -177,7 +177,11 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 
 		// Initialisations des tableaux pour les notifications
 		for(int i = 0; i < RECORD_NB; i++){ msg->shared_memory->head.records[i].pid = -1; }
-		for(int i = 0; i < TYPE_SEARCH_NB; i++){ msg->shared_memory->head.types_searched[i].number = 0; }
+
+		for(int i = 0; i < TYPE_SEARCH_NB; i++){
+			msg->shared_memory->head.types_searched[i].number = 0;
+			msg->shared_memory->head.types_searched[i].type = 0;
+		}
 
 		va_end(parametersInfos);
 

@@ -19,6 +19,8 @@
 
 #define UNLOCK true
 #define NO_UNLOCK false
+#define DECR true
+#define NO_DECR false
 
 #define RECORD_NB 5
 #define TYPE_SEARCH_NB 100
@@ -84,7 +86,7 @@ size_t m_nb(MESSAGE *);
 // FONCTIONS AUXILIAIRES
 int initialiser_mutex(pthread_mutex_t *pmutex);
 int initialiser_cond(pthread_cond_t *pcond);
-int my_error(char *txt, MESSAGE *file, bool unlock, char signal, int error);
+int my_error(char *txt, MESSAGE *file, bool decrease, long type, bool unlock, char signal, int error);
 int m_envoi_erreurs(MESSAGE *file, size_t len, int msgflag);
 void m_envoi_libres(MESSAGE *file, int current, size_t len);
 void m_envoi_occupees(MESSAGE *file, int current);

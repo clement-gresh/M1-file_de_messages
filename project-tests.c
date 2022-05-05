@@ -13,8 +13,8 @@ int t[4] = {-12, 99, 134, 543};
 
 /*
 int test_processus_paralleles(){
-	// creer une file
-	// 2 proc mettent 1000 messages
+	// 2 proc creent / se connectent a une file
+	// ils envoient 1000 messages
 	// 2 proc en reçoivent 500 pendant que les 2 premiers continuent à en envoyer 500 en mode bloquant
 	// il y a seulement 1000 places pour les messages
 
