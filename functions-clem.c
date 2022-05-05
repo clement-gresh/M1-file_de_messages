@@ -30,6 +30,37 @@ void m_annulation(MESSAGE *file){
 }
 
 
+int m_enregistrement_signal(MESSAGE *file){
+	struct header *head = &file->shared_memory->head;
+
+	for(int i = 0; i < RECORD_NB; i++){
+		if(head->records[i].pid != -1){
+			bool can_signal = true;
+			int k = 0;
+
+			while(k < TYPE_SEARCH_NB){
+				if((head->types_searched[k].type == 0
+						|| head->types_searched[k].type == head->records[i].type
+						|| -head->types_searched[k].type > head->records[i].type)
+					&& head->types_searched[k].number > 0
+					){
+					can_signal = false;
+					break;
+				}
+				k++;
+			}
+
+			if(can_signal){
+				kill(head->records[i].pid, head->records[i].signal);
+				head->records[i].pid = -1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+
 // debug : maj des LC des cases libres et occupees sont symetriques. Peut probablement les factoriser dans une seule fonction
 
 int enough_space(MESSAGE *file, size_t len){

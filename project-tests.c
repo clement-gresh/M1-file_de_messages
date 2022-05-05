@@ -35,7 +35,7 @@ int main(int argc, const char * argv[]) {
 	test_envoi(file);
 	test_reception(file);
 
-	int msg_nb = 22; // msg_nb doit etre compris entre 7 (pour les tests) et 22 (segmentation fault car 'type' devient trop grand)
+	int msg_nb = 20; // msg_nb doit etre compris entre 7 (pour les tests) et 24 (segmentation fault car 'type' devient trop grand)
 	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
