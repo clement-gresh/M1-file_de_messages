@@ -123,8 +123,7 @@ int sous_test_connexion_1(){
 		return -1;
 	}
 	// Verifie la memoire allouee
-	size_t memory_size = sizeof(header) + sizeof(record) * RECORD_NB + sizeof(type_search) * TYPE_SEARCH_NB
-						+ (sizeof(mon_message) + max_message_length) * msg_nb;
+	size_t memory_size = sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb;
 
 	if(file->memory_size != memory_size){
 		printf("sous_test_connexion_1() : ECHEC : erreur allocation memoire\n");
@@ -190,8 +189,7 @@ int sous_test_connexion_4(){
 		return -1;
 	}
 	// Verifie la memoire allouee
-	size_t memory_size = sizeof(header) + sizeof(record) * RECORD_NB + sizeof(type_search) * TYPE_SEARCH_NB
-						+ (sizeof(mon_message) + max_message_length) * msg_nb;
+	size_t memory_size = sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb;
 
 	if(file->memory_size != memory_size){
 		printf("sous_test_connexion_4() : ECHEC : erreur allocation memoire\n");
@@ -368,8 +366,7 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 		}
 
 		// Verifie les valeurs des index tant que le tableau n'est pas plein
-		size_t free_memory = file->memory_size
-				- (sizeof(header) + sizeof(record) * RECORD_NB + sizeof(type_search) * TYPE_SEARCH_NB);
+		size_t free_memory = file->memory_size - sizeof(header);
 
 		if(size_msg * (j+2) <= free_memory){
 			char text[] = "test_envois_multiples() : ECHEC : indice envois multiples.";
@@ -639,8 +636,7 @@ int test_compact_messages(){
 		}
 
 		// Verifie les valeurs des index tant que le tableau n'est pas plein
-		size_t free_memory = file->memory_size
-						- (sizeof(header) + sizeof(record) * RECORD_NB + sizeof(type_search) * TYPE_SEARCH_NB);
+		size_t free_memory = file->memory_size - sizeof(header);
 
 		if(small_msg_size * (j+2) <= free_memory){
 			char text[] = "test_compact_messages() : ECHEC : indice envois multiples.";

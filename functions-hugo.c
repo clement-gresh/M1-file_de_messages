@@ -139,8 +139,7 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     	size_t nb_msg = va_arg(parametersInfos, size_t);
     	size_t len_max = va_arg(parametersInfos, size_t);
     	mode_t mode = va_arg(parametersInfos, mode_t);
-		msg->memory_size = sizeof(header) + sizeof(record) * RECORD_NB + sizeof(type_search) * TYPE_SEARCH_NB
-				+ nb_msg * (len_max * sizeof(char) + sizeof(mon_message)); // debug : memory_size - sizeof(header)
+		msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message)); // debug : memory_size - sizeof(header)
 		msg->flag = options;
 
 		int fd = shm_open(nom, options, mode);

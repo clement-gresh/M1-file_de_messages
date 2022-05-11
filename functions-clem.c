@@ -273,6 +273,7 @@ void m_envoi_libres(MESSAGE *file, int current, size_t len){
 	if(prev != current){
 		while(prev + messages[prev].offset != current){
 			prev = prev + messages[prev].offset;
+			//prev = prev + ((mon_message *)file->shared_memory->messages[prev])->offset;
 		}
 	}
 
