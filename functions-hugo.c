@@ -166,8 +166,8 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 		msg->shared_memory->head.last_free = 0;
 
 		// La place disponible pour les messages
-		((mon_message*)msg->shared_memory->messages)[0].length = nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
-		((mon_message*)msg->shared_memory->messages)[0].offset = 0;
+		((mon_message *)&msg->shared_memory->messages[0])->length = nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
+		((mon_message *)&msg->shared_memory->messages[0])->offset = 0;
 
 		// Initialisation du mutex et des conditions
 		if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }

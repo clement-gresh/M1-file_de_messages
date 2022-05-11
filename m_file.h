@@ -14,7 +14,6 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdarg.h> // pour avoir le nombre d'arguments qui varie dans une meme fonction
-#include <math.h> // pour les tests
 #include <sys/wait.h>
 
 #define UNLOCK true
@@ -26,15 +25,17 @@
 #define TYPE_SEARCH_NB 100
 
 // STRUCTURES
+// Permet de stocker les info utiles quand un processus s'enregistre sur la file
 typedef struct record{ // debug : pas FIFO
-	pid_t pid;
-	int signal;
-	long type;
+	pid_t pid;						// pid du processus s'etant enregistre pour recevoir un signal
+	int signal;						// signal a envoye au processus quand un message est disponible
+	long type;						// type de message voulu par le processus
 } record;
 
+// Permet de stocker le type d'un message et le nombre de processus en attente pour ce type
 typedef struct type_search{
-	int number;
-	long type;
+	long type;						// type de message recherche par un/des processus
+	int number;						// nombre de processus en attente pour la reception de ce type de message
 } type_search;
 
 typedef struct mon_message{
@@ -45,17 +46,17 @@ typedef struct mon_message{
 } mon_message;
 
 typedef struct header{
-	size_t max_length_message;
-	int pipe_capacity;
-	int first_occupied;
-	int last_occupied;
-	int first_free;
-	int last_free;
+	size_t max_length_message;		// Taille maximale d'un message
+	int pipe_capacity;				// Nombre minimum de messages pouvant etre stockes dans la file
+	int first_occupied;				// Indice de la premiere case de la Liste Chainee des cases libres
+	int last_occupied;				// Indice de la derniere case de la Liste Chainee des cases libres
+	int first_free;					// Indice de la premiere case de la Liste Chainee des cases occupees
+	int last_free;					// Indice de la derniere case de la Liste Chainee des cases occupees
 	pthread_mutex_t mutex;
 	pthread_cond_t rcond;
 	pthread_cond_t wcond;
-	record records[RECORD_NB];
-	type_search types_searched[TYPE_SEARCH_NB];
+	record records[RECORD_NB];						// Liste des processus enregistres pour recevoir un signal
+	type_search types_searched[TYPE_SEARCH_NB];		// Liste des 'types' de messages voulus par les proc. en attente sur la file
 } header;
 
 typedef struct line{
@@ -103,24 +104,5 @@ int is_o_excl(int options);
 int private_or_shared(const char *nom);
 int build_prot(int options);
 int BitAt(long unsigned int x, int i);
-
-
-// FONCTIONS DE TEST
-int reception_check(mon_message *m1, char text[], ssize_t s, ssize_t size, size_t length, int value2, long type);
-int index_check(header * head, char text[], int first_free, int last_free, int first_occupied, int last_occupied);
-int offset_check(mon_message * messages, char text[], int offset, int position);
-int error_check(char text[], ssize_t s, int error);
-int test_connexion();
-int test_envoi_erreurs();
-int test_envoi(MESSAGE* file);
-int test_envois_multiples(MESSAGE* file, int msg_nb);
-int test_reception_erreurs();
-int test_reception(MESSAGE* file);
-int test_receptions_multiples(MESSAGE* file, int msg_nb);
-int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1);
-int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1, int position2);
-int test_receptions_multiples_fin(header *head, mon_message *messages, int msg_nb, size_t size_msg,
-		int position1, int position2, int position3);
-int test_compact_messages();
 
 #endif /* M_FILE_H_ */

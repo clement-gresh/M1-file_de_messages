@@ -1,4 +1,4 @@
-#include "m_file.h"
+#include "project-tests.h"
 
 // <>
 
@@ -23,8 +23,6 @@ int test_processus_paralleles(){
 }
 */
 
-
-
 int main(int argc, const char * argv[]) {
 	printf("\n");
 	test_connexion();
@@ -35,7 +33,7 @@ int main(int argc, const char * argv[]) {
 	test_envoi(file);
 	test_reception(file);
 
-	int msg_nb = 20; // msg_nb doit etre compris entre 7 (pour les tests) et 24 (segmentation fault car 'type' devient trop grand)
+	int msg_nb = 500; // msg_nb doit etre compris entre 7 (pour les tests) et 24 (segmentation fault car 'type' devient trop grand)
 	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
@@ -58,7 +56,8 @@ int reception_check(mon_message *m1, char text[], ssize_t s, ssize_t size, size_
 }
 
 // Verifie que les index sont egaux aux valeurs des parametres
-int index_check(header * head, char text[], int first_free, int last_free, int first_occupied, int last_occupied){
+int index_check(MESSAGE* file, char text[], int first_free, int last_free, int first_occupied, int last_occupied){
+	header *head = &file->shared_memory->head;
 
 	if(head->first_free != first_free || head->last_free != last_free
 			|| head->first_occupied != first_occupied || head->last_occupied != last_occupied){
@@ -74,11 +73,11 @@ int index_check(header * head, char text[], int first_free, int last_free, int f
 }
 
 // Verifie la valeur de l'offset d'une case de la file
-int offset_check(mon_message * messages, char text[], int offset, int position){
-	if(messages[position].offset != offset){
+int offset_check(MESSAGE* file, char text[], int offset, int position){
+	if( ((mon_message *)&file->shared_memory->messages[position])->offset != offset ){
 		printf("%s\n", text);
 		printf("offset voulu : %d\n", offset);
-		printf("offset reel : %ld\n", messages[position].offset);
+		printf("offset reel : %ld\n", ((mon_message *)&file->shared_memory->messages[position])->offset);
 		printf("\n");
 		return -1;
 	}
@@ -134,7 +133,7 @@ int sous_test_connexion_1(){
 	}
 
 	// Verifie l'initialisation des index du tableau de message
-	if(index_check(head, "sous_test_connexion_1() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+	if(index_check(file, "sous_test_connexion_1() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
 
 	printf("sous_test_connexion_1() : OK\n");
 	return 0;
@@ -200,7 +199,7 @@ int sous_test_connexion_4(){
 	}
 
 	// Verifie l'initialisation des index du tableau de message
-	if(index_check(head, "sous_test_connexion_4() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+	if(index_check(file, "sous_test_connexion_4() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
 
 	if(fork()==0){ // enfant
 		(file->memory_size)++;
@@ -259,7 +258,7 @@ int sous_test_connexion_5(){
 	}
 
 	// Verifie l'initialisation des index du tableau de message
-	if(index_check(head, "sous_test_connexion_5() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+	if(index_check(file, "sous_test_connexion_5() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
 	printf("sous_test_connexion_5() : OK\n");
 	return 0;
 }
@@ -271,7 +270,7 @@ int test_connexion(){
 	sous_test_connexion_3(); // test connexion sur un file existant
 	sous_test_connexion_4(); //tester la connexion a une file anonyme par un processus enfant
 	//sous_test_connexion_5(); //tester la connexion O_CREAT | O_EXCL test ok si on l'excécute 2 fois on a bien une erreur
-
+	// debug lancer une exception et l'attraper pour pouvoir faire le test 5 ?
 
 	// debug : Tester les droits (O_RDWR et S_IRWXU)
 	// debug : tester les droits avec differentes valeurs
@@ -317,9 +316,6 @@ int test_envoi_erreurs(){
 
 // Teste m_envoi en envoyant un message quand la file est vide et un quand elle est pleine (mode non bloquant)
 int test_envoi(MESSAGE* file){
-	struct header *head = &file->shared_memory->head;
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
-
 	struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
 
@@ -332,10 +328,10 @@ int test_envoi(MESSAGE* file){
 	}
 
 	// Verifie les valeurs des index
-	if(index_check(head, "test_envoi() : ECHEC : indice.", -1, -1, 0, 0) == -1) { return -1; };
+	if(index_check(file, "test_envoi() : ECHEC : indice.", -1, -1, 0, 0) == -1) { return -1; };
 
 	// Verifie la valeur de l'offset
-	if(offset_check(messages, "test_envoi() : ECHEC : offset message.", 0, 0) == -1) { return -1; };
+	if(offset_check(file, "test_envoi() : ECHEC : offset message.", 0, 0) == -1) { return -1; };
 
 	// Test : envoi en mode non bloquant SANS place
 	int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
@@ -350,9 +346,6 @@ int test_envoi(MESSAGE* file){
 // Test m_envoi en envoyant de multiples messages (file pleine et non pleine)
 int test_envois_multiples(MESSAGE* file, int msg_nb){
 	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
-	header *head = &file->shared_memory->head;
-
 	struct mon_message *m = malloc(size_msg);
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
 
@@ -370,21 +363,21 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 
 		if(size_msg * (j+2) <= free_memory){
 			char text[] = "test_envois_multiples() : ECHEC : indice envois multiples.";
-			if(index_check(head, text, size_msg * (j+1), size_msg * (j+1), 0, size_msg * (j)) == -1) { return -1; };
+			if(index_check(file, text, size_msg * (j+1), size_msg * (j+1), 0, size_msg * (j)) == -1) { return -1; };
 		}
 		// Verifie les valeurs des index quand le tableau est plein
 		else{
 			char text[] = "test_envois_multiples() : ECHEC : indice apres envoi dernier message.";
-			if(index_check(head, text, -1, -1, 0, size_msg * (j)) == -1) { return -1; };
+			if(index_check(file, text, -1, -1, 0, size_msg * (j)) == -1) { return -1; };
 		}
 	}
 	// Verifie les offsets dans la file
 	for(int j = 0; j < msg_nb; j++){
-		if(j != msg_nb-1 && offset_check(messages, "test_envois_multiples() : ECHEC : offset.", size_msg, j*size_msg) == -1)
+		if(j != msg_nb-1 && offset_check(file, "test_envois_multiples() : ECHEC : offset.", size_msg, j*size_msg) == -1)
 			{ return -1; }
 
 		else if(j == msg_nb-1
-				&& offset_check(messages, "test_envois_multiples() : ECHEC : offset dernier message.", 0, j*size_msg) == -1)
+				&& offset_check(file, "test_envois_multiples() : ECHEC : offset dernier message.", 0, j*size_msg) == -1)
 			{ return -1; }
 	}
 
@@ -427,7 +420,7 @@ int test_reception_erreurs(){
 		{return -1;}
 	*/
 
-	// Test reception si la longueur de la memoire a l'adresse msg est plus petite que le message a lire
+	// Test reception si la longueur de la memoire a l'adresse msg est plus petite que le message a lire : debug
 
 	printf("test_reception_erreurs() : OK\n\n");
 	return 0;
@@ -436,8 +429,6 @@ int test_reception_erreurs(){
 
 // Teste m_reception en tentant de recuperer un message de la file quand elle est pleine ou vide (mode non bloquant)
 int test_reception(MESSAGE* file){
-	struct header *head = &file->shared_memory->head;
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
 	struct mon_message *m1 = malloc(sizeof(mon_message) + sizeof(t));
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
@@ -448,10 +439,10 @@ int test_reception(MESSAGE* file){
 		{return -1;}
 
 	// Verifie les valeurs des index
-	if(index_check(head, "test_reception() : ECHEC : indices apres reception 1er message.", 0, 0, -1, -1) == -1) {return -1;};
+	if(index_check(file, "test_reception() : ECHEC : indices apres reception 1er message.", 0, 0, -1, -1) == -1) {return -1;};
 
 	// Verifie la valeur de l'offset dans la file
-	if(offset_check(messages, "test_reception() : ECHEC : offset case vide.", 0, 0) == -1) {return -1;}
+	if(offset_check(file, "test_reception() : ECHEC : offset case vide.", 0, 0) == -1) {return -1;}
 
 	// Reception en mode NON bloquant alors qu'il n'y a pas de message dans la file
 	s = m_reception(file, m1, sizeof(t), 0, O_NONBLOCK);
@@ -471,8 +462,6 @@ int test_reception(MESSAGE* file){
 // A la fin les cases qui sont toujours occupees sont les cases 0 (1001), 1 (998), 4 (1016)
 int test_receptions_multiples(MESSAGE* file, int msg_nb){
 	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
-	struct header *head = &file->shared_memory->head;
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
 	struct mon_message *m1 = malloc(size_msg);
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 	int position1 = 2; // position of message with type 1004
@@ -507,13 +496,13 @@ int test_receptions_multiples(MESSAGE* file, int msg_nb){
 
 			// Verifie les offsets (case lue et case precedente)
 			char text1[] = "test_receptions_multiples() : ECHEC : offset derniere case lue.";
-			if(j > 6 && offset_check(messages, text1, 0, size_msg * j) == -1) {return -1;}
+			if(j > 6 && offset_check(file, text1, 0, size_msg * j) == -1) {return -1;}
 
 			char text2[] = "test_receptions_multiples() : ECHEC : offset precedente case lue.";
-			if(j > 6 && offset_check(messages, text2, size_msg, size_msg * (j-1)) == -1) {return -1;}
+			if(j > 6 && offset_check(file, text2, size_msg, size_msg * (j-1)) == -1) {return -1;}
 		}
 	}
-	if(test_receptions_multiples_fin(head, messages, msg_nb, size_msg, position1, position2, position3) == -1)
+	if(test_receptions_multiples_fin(file, msg_nb, size_msg, position1, position2, position3) == -1)
 		{return -1;}
 
 	printf("test_receptions_multiples() : OK\n\n");
@@ -524,9 +513,9 @@ int test_receptions_multiples(MESSAGE* file, int msg_nb){
 // Teste la reception avec type strictement positif
 int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1){
 	struct header *head = &file->shared_memory->head;
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
+	char *messages = file->shared_memory->messages;
 
-	ssize_t s = m_reception(file, m1, sizeof(t), messages[position1*size_msg].type, O_NONBLOCK);
+	ssize_t s = m_reception(file, m1, sizeof(t), ((mon_message *)&messages[position1*size_msg])->type, O_NONBLOCK);
 
 	// Verifie les donnees du message
 	char text0[] = "test_reception_type_pos() : ECHEC : reception avec valeur specifique de type.";
@@ -535,12 +524,12 @@ int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int
 
 	// Verifie les valeurs des index
 	char text1[] = "test_reception_type_pos() : ECHEC : indices apres reception 1er message.";
-	if(index_check(head, text1, position1 * size_msg, position1 * size_msg, 0, (msg_nb - 1) * size_msg) == -1)
+	if(index_check(file, text1, position1 * size_msg, position1 * size_msg, 0, (msg_nb - 1) * size_msg) == -1)
 		{ return -1; };
 
 	// Verifie la valeur de l'offset
 	char text2[] = "test_reception_type_pos() : ECHEC : offset case libre dans la file apres reception 1er msg.";
-	if(offset_check(messages, text2, 0, head->first_free) == -1)
+	if(offset_check(file, text2, 0, head->first_free) == -1)
 		{return -1;}
 
 	return 0;
@@ -550,9 +539,9 @@ int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int
 // Teste la reception avec type negatif
 int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1, int position2){
 	struct header *head = &file->shared_memory->head;
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
+	char *messages = file->shared_memory->messages;
 
-	ssize_t s = m_reception(file, m1, sizeof(t), -(messages[position2*size_msg].type + 2), O_NONBLOCK);
+	ssize_t s = m_reception(file, m1, sizeof(t), -(((mon_message *)&messages[position2*size_msg])->type + 2), O_NONBLOCK);
 
 	// Verifie les donnees du message
 	char text0[] = "test_reception_type_neg() : ECHEC : reception avec valeur negative de type.";
@@ -560,50 +549,50 @@ int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int
 
 	// Verifie les valeurs des index
 	char text[] = "test_reception_type_neg() : ECHEC : indice apres reception 2eme message.";
-	if(index_check(head, text, position1 * size_msg, position2 * size_msg, 0, (msg_nb - 1) * size_msg) == -1)
+	if(index_check(file, text, position1 * size_msg, position2 * size_msg, 0, (msg_nb - 1) * size_msg) == -1)
 		{ return -1; };
 
 	// Verifie la valeur des offsets (premiere et deuxieme case libre)
 	char text2[] = "test_reception_type_neg() : ECHEC : offset case libre 1 dans la file apres reception 2eme msg.";
-	if(offset_check(messages, text2, size_msg * (position2 - position1), head->first_free) == -1) {return -1;}
+	if(offset_check(file, text2, size_msg * (position2 - position1), head->first_free) == -1) {return -1;}
 
 	char text3[] = "test_reception_type_neg() : ECHEC : offset case libre 2 dans la file apres reception 2eme msg.";
-	if(offset_check(messages, text3, 0, head->last_free) == -1 ) {return -1;}
+	if(offset_check(file, text3, 0, head->last_free) == -1 ) {return -1;}
 
 	return 0;
 }
 
 
 // Verifie les index et offsets apres receptions multiples
-int test_receptions_multiples_fin(header *head, mon_message *messages, int msg_nb, size_t size_msg,
+int test_receptions_multiples_fin(MESSAGE* file, int msg_nb, size_t size_msg,
 		int position1, int position2, int position3){
 
 	// Verifie les index une fois les appels a m_reception termines
 	char text5[] = "test_receptions_multiples_fin() : ECHEC : indice apres reception de tous les messages.";
-	if(index_check(head, text5, position1 * size_msg, (msg_nb - 1) * size_msg, 0, position3 * size_msg) == -1)
+	if(index_check(file, text5, position1 * size_msg, (msg_nb - 1) * size_msg, 0, position3 * size_msg) == -1)
 		{ return -1; };
 
 
 	// Verifie la valeur des offsets des 3 premieres cases libres de la LC
 	char text6[] = "test_receptions_multiples_fin() : ECHEC : offset 1ere case libre apres multiples receptions.";
-	if(offset_check(messages, text6, size_msg * (position2 - position1), position1 * size_msg) == -1) {return -1;}
+	if(offset_check(file, text6, size_msg * (position2 - position1), position1 * size_msg) == -1) {return -1;}
 
 	char text7[] = "test_receptions_multiples_fin() : ECHEC : offset 2eme case libre apres multiples receptions.";
-	if(offset_check(messages, text7, -2 * size_msg, position2 * size_msg) == -1) {return -1;}
+	if(offset_check(file, text7, -2 * size_msg, position2 * size_msg) == -1) {return -1;}
 
 	char text8[] = "test_receptions_multiples_fin() : ECHEC : offset 3eme case libre apres multiples receptions.";
-	if(offset_check(messages, text8, 3 * size_msg, 3 * size_msg) == -1) {return -1;}
+	if(offset_check(file, text8, 3 * size_msg, 3 * size_msg) == -1) {return -1;}
 
 
 	// Verifie la valeur des offsets des 3 cases occupees de la LC
 	char text9[] = "test_receptions_multiples_fin() : ECHEC : offset 1ere case occupee apres multiples receptions.";
-	if(offset_check(messages, text9, size_msg, 0) == -1) {return -1;}
+	if(offset_check(file, text9, size_msg, 0) == -1) {return -1;}
 
 	char text10[] = "test_receptions_multiples_fin() : ECHEC : offset 2eme case occupee apres multiples receptions.";
-	if(offset_check(messages, text10, 3 * size_msg, size_msg) == -1) {return -1;}
+	if(offset_check(file, text10, 3 * size_msg, size_msg) == -1) {return -1;}
 
 	char text11[] = "test_receptions_multiples_fin() : ECHEC : offset 3eme/derniere case occupee apres multiples receptions.";
-	if(offset_check(messages, text11, 0, 4 * size_msg) == -1) {return -1;}
+	if(offset_check(file, text11, 0, 4 * size_msg) == -1) {return -1;}
 
 	return 0;
 }
@@ -614,11 +603,8 @@ int test_compact_messages(){
 	int u[1] = {45};
 	int small_msg_size = sizeof(struct mon_message) + sizeof(u);
 	int big_msg_size = sizeof(struct mon_message) + sizeof(t);
-	int big_msg_nb= 15;
+	int big_msg_nb= 150;
 	MESSAGE* file = m_connexion("/test_compact", O_RDWR | O_CREAT, big_msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
-
-	struct header *head = &file->shared_memory->head;
-	mon_message *messages = (mon_message *)file->shared_memory->messages;
 
 	struct mon_message *m = malloc(sizeof(struct mon_message) + sizeof(u));
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
@@ -640,25 +626,25 @@ int test_compact_messages(){
 
 		if(small_msg_size * (j+2) <= free_memory){
 			char text[] = "test_compact_messages() : ECHEC : indice envois multiples.";
-			if(index_check(head, text, small_msg_size * (j+1), small_msg_size * (j+1), 0, small_msg_size * (j)) == -1)
+			if(index_check(file, text, small_msg_size * (j+1), small_msg_size * (j+1), 0, small_msg_size * (j)) == -1)
 				{ return -1; };
 		}
 
 		// Verifie les valeurs des index quand le tableau est plein
 		else{
 			char text[] = "test_compact_messages() : ECHEC : indice apres envoi dernier message.";
-			if(index_check(head, text, -1, -1, 0, small_msg_size * (j)) == -1) { return -1; };
+			if(index_check(file, text, -1, -1, 0, small_msg_size * (j)) == -1) { return -1; };
 		}
 	}
 
 	// Verifie les offsets dans la file
 	for(int j = 0; j < small_msg_nb; j++){
 		if(j != small_msg_nb-1
-				&& offset_check(messages, "test_compact_messages() : ECHEC : offset.", small_msg_size, j*small_msg_size) == -1)
+				&& offset_check(file, "test_compact_messages() : ECHEC : offset.", small_msg_size, j*small_msg_size) == -1)
 			{ return -1; }
 
 		else if(j == small_msg_nb-1
-				&& offset_check(messages, "test_compact_messages() : ECHEC : offset dernier message.", 0, j*small_msg_size) == -1)
+				&& offset_check(file, "test_compact_messages() : ECHEC : offset dernier message.", 0, j*small_msg_size) == -1)
 			{ return -1; }
 	}
 
