@@ -77,14 +77,13 @@ int main(int argc, const char * argv[]) {
 	test_envoi(file);
 	test_reception(file);
 
-	int msg_nb = 500; // msg_nb doit etre compris entre 7 (pour les tests) et 24 (segmentation fault car 'type' devient trop grand)
+	int msg_nb = 20; // msg_nb doit etre compris entre 7 (pour les tests) et 24 (segmentation fault car 'type' devient trop grand)
 	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
 	//test_processus_paralleles();
 	test_compact_messages();
 
-	/*
 	m_connexion("/test_connexion_exist", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	MESSAGE* file4 = m_connexion("/test_connexion_exist", O_RDWR);
 
@@ -97,7 +96,7 @@ int main(int argc, const char * argv[]) {
 	if( m_envoi( file4, m, sizeof(t), 0) != 0 ){
 		printf("test_connexion_exist() : ECHEC : envoie message.\n"); return -1;
 	}
-	*/
+	printf("SOUS TEST 6() : OK\n");
 
 	return EXIT_SUCCESS;
 }
@@ -267,7 +266,6 @@ int sous_test_connexion_4(){
 
 	if(fork()==0){ // enfant
 		(file->memory_size)++;
-		printf("Child started, value = %ld\n", file->memory_size);
 		if(m_deconnexion(file)==-1){
 			perror("m_deconnexion");
 			return -1;
@@ -279,7 +277,6 @@ int sous_test_connexion_4(){
 			perror("wait");
 			return -1;
 		}
-		printf("In parent, value = %ld\n", file->memory_size);
 		if(m_deconnexion(file)==-1){
 			perror("m_deconnexion");
 			return -1;
@@ -462,18 +459,18 @@ int test_reception_erreurs(){
 	MESSAGE* file = m_connexion("/reception_erreurs_1", O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
-	ssize_t s = m_reception(file, m1, sizeof(t), 0, O_RDWR);
+	ssize_t s = m_reception(file, m1, sizeof(t), 0, O_RDWR); // O_RDWR au lieu de 0 ou O_NONBLOCK
 	if(error_check("test_reception_erreurs() : ECHEC : gestion reception avec drapeau incorrect.", s, EIO) == -1)
 		{return -1;}
 
 	// Test file Write Only
+	// En fait, m_connexion avec O_WRONLY est automatiquement passe en O_RDWR car sinon cela entraine des segmentation
+	// fault sur certains systemes. Ce test ne fonctionne donc pas en general (pas possible de se connecter en write only).
 	/*
 	MESSAGE* file1 = m_connexion("/reception_erreurs_1", O_WRONLY);
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
-	printf("\n\navant m_reception\n"); // debug
-	s = m_reception(file1, m1, sizeof(t), 0, 0);
-	printf("apres m_reception\n\n"); // debug
+	s = m_reception(file1, m1, sizeof(t), 0, O_NONBLOCK);
 	if(error_check("test_reception_erreurs() : ECHEC : gestion lecture quand Write Only.", s, EPERM) == -1)
 		{return -1;}
 	*/
@@ -532,6 +529,27 @@ int test_receptions_multiples(MESSAGE* file, int msg_nb){
 	// Teste reception avec un type strictement negatif
 	if(test_reception_type_neg(file, m1, size_msg, msg_nb, position1, position2) == -1) {return -1;}
 
+	//debug
+	/*
+	printf("CASES OCCUPEES\n");
+	if(file->shared_memory->head.first_occupied ==! -1){
+		int current = file->shared_memory->head.first_occupied;
+		int offset = ((mon_message*)(&file->shared_memory->messages[current]))->offset;
+		int i = 0;
+		while(offset != 0){
+			int type = ((mon_message*)(&file->shared_memory->messages[current]))->type;
+			printf("message n %d, position = %d, type = %d, offset = %d\n", i, current, type, offset);
+			current = current + offset;
+			offset = ((mon_message*)(&file->shared_memory->messages[current]))->offset;
+			i++;
+		}
+	}
+	else{ printf("pas de cases occupees :\n"); }
+	printf("fin cases occupees \n\n");
+	*/
+	//fin debug
+
+	// debug : a mettre dans une fonction a part
 	// Receptions multiples alors qu'il y a bien des messages dans la file
 	for(int j = 2; j < msg_nb; j++){
 		long type;
