@@ -19,6 +19,8 @@ int test_reception(MESSAGE* file);
 int test_receptions_multiples(MESSAGE* file, int msg_nb);
 int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1);
 int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1, int position2);
+int test_reception_multiples_milieu(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb,
+		int position1, int position2, int position3);
 int test_receptions_multiples_fin(MESSAGE* file, int msg_nb, size_t size_msg,
 		int position1, int position2, int position3);
 int test_compact_messages();

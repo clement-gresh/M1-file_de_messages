@@ -108,7 +108,7 @@ int is_o_excl(int options);
 int private_or_shared(const char *nom);
 int build_prot(int options);
 int BitAt(long unsigned int x, int i);
-void connex_msg(MESSAGE *msg, line *addr, const char *nom, int options);
+int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options);
 void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode);
 
 #endif /* M_FILE_H_ */

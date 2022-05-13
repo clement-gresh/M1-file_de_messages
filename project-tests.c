@@ -72,6 +72,7 @@ int main(int argc, const char * argv[]) {
 	test_connexion();
 	test_deconnexion();
 	test_destruction();
+
 	test_envoi_erreurs();
 	test_reception_erreurs();
 
@@ -85,20 +86,6 @@ int main(int argc, const char * argv[]) {
 	test_receptions_multiples(file2, msg_nb);
 	//test_processus_paralleles();
 	test_compact_messages();
-
-	m_connexion("/test_connexion_exist", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
-	MESSAGE* file4 = m_connexion("/test_connexion_exist", O_RDWR);
-
-	struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
-	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
-	m->type = (long) getpid();
-	memmove( m->mtext, t, sizeof( t ));
-
-	// Test : envoi en mode bloquant AVEC de la place
-	if( m_envoi( file4, m, sizeof(t), 0) != 0 ){
-		printf("test_connexion_exist() : ECHEC : envoie message.\n"); return -1;
-	}
-	printf("SOUS TEST 6() : OK\n");
 
 	return EXIT_SUCCESS;
 }
@@ -159,34 +146,32 @@ int error_check(char text[], ssize_t s, int error){
 
 
 // Teste la fonction m_connexion
-int sous_test_connexion_1(){
-	char name[] = "/nonorouqkdjnqkdjfnqlfn";
+int test_connexion_simple(char name[]){
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file == NULL){
-		printf("sous_test_connexion1() : ECHEC : NULL\n");
+		printf("test_connexion_simple() : ECHEC : NULL\n");
 		return -1;
 	}
 	struct header *head = &file->shared_memory->head;
 
 	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
-
 	if(head->pipe_capacity != msg_nb){
 		printf("Target pipe capacity : %d != %d.\n", head->pipe_capacity, msg_nb);
-		printf("sous_test_connexion_1() : ECHEC : erreur pipe_capacity\n");
+		printf("test_connexion_simple() : ECHEC : erreur pipe_capacity\n");
 		return -1;
 	}
 	if(head->max_length_message != max_message_length){
 		printf("Actual max message length : %ld != %ld.\n", head->max_length_message , max_message_length);
-		printf("sous_test_connexion1() : ECHEC : erreur max_length_message\n");
+		printf("test_connexion_simple() : ECHEC : erreur max_length_message\n");
 		return -1;
 	}
 	// Verifie la memoire allouee
 	size_t memory_size = sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb;
 
 	if(file->memory_size != memory_size){
-		printf("sous_test_connexion_1() : ECHEC : erreur allocation memoire\n");
+		printf("test_connexion_simple() : ECHEC : erreur allocation memoire\n");
 		printf("Target memory size : %ld\n",memory_size);
 		printf("Actual memory size : %ld\n", file->memory_size);
 		printf("\n");
@@ -194,69 +179,66 @@ int sous_test_connexion_1(){
 	}
 
 	// Verifie l'initialisation des index du tableau de message
-	if(index_check(file, "sous_test_connexion_1() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
-
-	printf("sous_test_connexion_1() : OK\n");
+	if(index_check(file, "test_connexion_simple() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
 	return 0;
 }
 
-int sous_test_connexion_2(){
-	char name[] = "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+int test_connexion_read_only(){
+	char name[] = "/aaaaaaaaaaaaaaaa";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file = m_connexion(name, O_RDONLY | O_CREAT, msg_nb, max_message_length, 0);
 	if(file != NULL){
-		printf("sous_test_connexion2() : ECHEC : file != NULL\n");
+		printf("test_connexion_read_only() : ECHEC : file != NULL\n");
 		return -1;
 	}
-	
-	printf("sous_test_connexion_2() : OK\n");
 	return 0;
 }
 
-int sous_test_connexion_3(){
-	char name[] = "/nonorouqkdjnqkdjfnqlfn";
-	MESSAGE* file = m_connexion(name, O_RDONLY);
-	if(file == NULL){
-		printf("sous_test_connexion3() : ECHEC : NULL\n");
-		return -1;
-	}
-	if(file->shared_memory->head.max_length_message != 20){
-		printf("sous_test_connexion3() : ECHEC : file->shared_memory->head.max_length_message != 20\n");
-		return -1;
-	}
-	printf("sous_test_connexion3() : OK\n");
+// Teste la connexion a une file existante
+int test_connexion_existe(char name[]){
+	// Teste m_connexion sur une file existante (doit fonctionner)
+	MESSAGE* file = m_connexion(name, O_RDONLY | O_CREAT);
+	if(file == NULL){ printf("test_connexion_existe() : ECHEC : connexion a file existante\n"); return -1; }
+
+	// Teste envoi d'un message sur la file (doit fonctionner)
+	struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
+	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
+	m->type = (long) getpid();
+	memmove( m->mtext, t, sizeof( t ));
+
+	if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_connexion_existe() : ECHEC : envoie message.\n"); return -1; }
+
 	return 0;
 }
 
-int sous_test_connexion_4(){
+int test_connexion_anonyme(){
 	char name[] = "/kangourou";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file == NULL){
-		printf("sous_test_connexion4() : ECHEC : NULL\n");
+		printf("test_connexion_anonyme() : ECHEC : NULL\n");
 		return -1;
 	}
 	struct header *head = &file->shared_memory->head;
 
 	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
-
 	if(head->pipe_capacity != msg_nb){
 		printf("Target pipe capacity : %d != %d.\n", head->pipe_capacity, msg_nb);
-		printf("sous_test_connexion_4() : ECHEC : erreur pipe_capacity\n");
+		printf("test_connexion_anonyme() : ECHEC : erreur pipe_capacity\n");
 		return -1;
 	}
 	if(head->max_length_message != max_message_length){
 		printf("Actual max message length : %ld != %ld.\n", head->max_length_message , max_message_length);
-		printf("sous_test_connexion4() : ECHEC : erreur max_length_message\n");
+		printf("test_connexion_anonyme() : ECHEC : erreur max_length_message\n");
 		return -1;
 	}
 	// Verifie la memoire allouee
 	size_t memory_size = sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb;
 
 	if(file->memory_size != memory_size){
-		printf("sous_test_connexion_4() : ECHEC : erreur allocation memoire\n");
+		printf("test_connexion_anonyme() : ECHEC : erreur allocation memoire\n");
 		printf("Target memory size : %ld\n", memory_size);
 		printf("Actual memory size : %ld\n", file->memory_size);
 		printf("\n");
@@ -264,79 +246,40 @@ int sous_test_connexion_4(){
 	}
 
 	// Verifie l'initialisation des index du tableau de message
-	if(index_check(file, "sous_test_connexion_4() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+	if(index_check(file, "test_connexion_anonyme() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
 
-	if(fork()==0){ // enfant
-		(file->memory_size)++;
-		if(m_deconnexion(file)==-1){
-			perror("m_deconnexion");
-			return -1;
-		}
-		_exit(0);
-	}
-	else{
-		if(wait(NULL)==-1){
-			perror("wait");
-			return -1;
-		}
-		if(m_deconnexion(file)==-1){
-			perror("m_deconnexion");
-			return -1;
-		}
-		printf("sous_test_connexion4() : OK\n");
-		return 0;
-	}
+	return 0;
 }
 
-int sous_test_connexion_5(){
-	char name[] = "/nonono";
+int test_connexion_excl(){
+	char name[] = "/cecinestpasunnom";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
+
+	printf("avant connexion excl 1\n"); // debug
+	// Test creation de la file avec O_CREAT | O_EXCL (doit fonctionner)
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT | O_EXCL, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
-	if(file == NULL){
-		printf("sous_test_connexion5() : ECHEC : NULL\n");
-		return -1;
-	}
-	struct header *head = &file->shared_memory->head;
+	if(file == NULL){ printf("test_connexion_excl() : ECHEC : creation file avec O_EXCL\n"); return -1; }
 
-	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
+	printf("apres connexion excl 1\n"); // debug
+	// Test connexion a une file existante avec O_CREAT | O_EXCL (doit echouer)
+	MESSAGE* file2 = m_connexion(name, O_RDWR | O_CREAT | O_EXCL, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
+	if(file2 != NULL){ printf("test_connexion_excl() : ECHEC : connexion file existante avec O_EXCL\n"); return -1; }
 
-	if(head->pipe_capacity != msg_nb){
-		printf("Target pipe capacity : %d != %d.\n", head->pipe_capacity, msg_nb);
-		printf("sous_test_connexion_5() : ECHEC : erreur pipe_capacity\n");
-		return -1;
-	}
-	if(head->max_length_message != max_message_length){
-		printf("Actual max message length : %ld != %ld.\n", head->max_length_message , max_message_length);
-		printf("sous_test_connexion5() : ECHEC : erreur max_length_message\n");
-		return -1;
-	}
-	// Verifie la memoire allouee
-	if(file->memory_size != sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb){
-		printf("sous_test_connexion_5() : ECHEC : erreur allocation memoire\n");
-		printf("Target memory size : %ld\n", sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb);
-		printf("Actual memory size : %ld\n", file->memory_size);
-		printf("\n");
-		return -1;
-	}
+	if(m_destruction(name) != 0){ perror("test_connexion_excl : ECHEC : m_destruction()\n"); return -1; }
 
-	// Verifie l'initialisation des index du tableau de message
-	if(index_check(file, "sous_test_connexion_5() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
-	printf("sous_test_connexion_5() : OK\n");
 	return 0;
 }
 
 
 int test_connexion(){
-	sous_test_connexion_1(); //test connexion simple en O_RDWR | O_CREAT
-	sous_test_connexion_2(); //test connexion simple en O_RDONLY | O_CREAT
-	sous_test_connexion_3(); // test connexion sur un file existant
-	sous_test_connexion_4(); //tester la connexion a une file anonyme par un processus enfant
-	//sous_test_connexion_5(); //tester la connexion O_CREAT | O_EXCL test ok si on l'excécute 2 fois on a bien une erreur
-	// debug lancer une exception et l'attraper pour pouvoir faire le test 5 ?
+	char name1[] = "/nonono";
+	if(test_connexion_simple(name1) == -1) { return -1; } //test connexion simple en O_RDWR | O_CREAT
+	if(test_connexion_read_only() == -1) { return -1; } //test connexion simple en O_RDONLY | O_CREAT
+	if(test_connexion_existe(name1) == -1) { return -1; } // test connexion sur une file existante
+	if(test_connexion_anonyme() == -1) { return -1; } //tester la connexion a une file anonyme par un processus enfant
 
-	// debug : Tester les droits (O_RDWR et S_IRWXU)
-	// debug : tester les droits avec differentes valeurs
+	//if(test_connexion_excl() == -1) { return -1; } // tester la connexion en O_CREAT | O_EXCL
 
 	printf("test_connexion() : OK\n\n");
 	return 0;
@@ -350,34 +293,20 @@ int test_deconnexion(){
 	MESSAGE* file2 = m_connexion(name, O_RDONLY);
 	MESSAGE* file3 = m_connexion(name, O_WRONLY);
 
-	if((void*)file2->shared_memory == NULL){
-		perror("(void*)file2->shared_memory == NULL\n");
-		return -1;
-	}
-	if((void*)file1->shared_memory == NULL){
-		perror("(void*)file1->shared_memory == NULL\n");
-		return -1;
-	}
-	if((void*)file3->shared_memory == NULL){
-		perror("(void*)file3->shared_memory == NULL\n");
-		return -1;
-	}
+	// Deconnexion sur file2
+	if(m_deconnexion(file2) != 0){ perror("test_deconnexion : ECHEC : m_deconnexion(file2) != 0\n"); return -1; }
 
-	if(m_deconnexion(file2) != 0){
-		perror("m_deconnexion(file2) != 0\n");
-		return -1;
-	}
-
+	// Teste que file2 n'est plus utilisable mais file1 et file3 le sont toujours
 	if((void*)file2->shared_memory != NULL){
-		perror("(void*)file2->shared_memory != NULL\n");
+		perror("test_deconnexion : ECHEC : file2->shared_memory != NULL\n");
 		return -1;
 	}
 	if((void*)file1->shared_memory == NULL){
-		perror("(void*)file1->shared_memory == NULL\n");
+		perror("test_deconnexion : ECHEC : file1->shared_memory == NULL\n");
 		return -1;
 	}
 	if((void*)file3->shared_memory == NULL){
-		perror("(void*)file3->shared_memory == NULL\n");
+		perror("test_deconnexion : ECHEC : file3->shared_memory == NULL\n");
 		return -1;
 	}
 
@@ -386,28 +315,47 @@ int test_deconnexion(){
 }
 
 int test_destruction(){
-	/*char name[] = "/NONO";
+	char name[] = "/NONO";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file1 = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
-	MESSAGE* file2 ;
-	MESSAGE* file3 ;
 
-	if((void*)file1->shared_memory == NULL){
-		perror("(void*)file2->shared_memory == NULL\n");
+	// Tentative de connexion avant destruction
+	if(m_connexion(name, O_WRONLY) == NULL){
+		perror("test_destruction : ECHEC : connexion impossible AVANT destruction\n");
 		return -1;
 	}
 
-	if(m_destruction(name) != 0){
-		perror("m_destruction(name) != 0\n");
-		return -1;
-	}
+	if(fork()==0){ // enfant
+		// Destruction de la file
+		if(m_destruction(name) != 0){ perror("test_destruction : ECHEC : m_destruction retour != 0\n"); return -1; }
 
-	if(fork()==0){
-		file2 = m_connexion(name, O_RDONLY);
-	}else{
-		file3 = m_connexion(name, O_WRONLY);
-	}*/
+		// Tentative de connexion apres destruction
+		if(m_connexion(name, O_RDONLY) != NULL){
+			perror("test_destruction : ECHEC : connexion possible apres destruction\n");
+			return -1;
+		}
+		_exit(0);
+	}
+	else{ // pere
+		if(wait(NULL)==-1){ perror("wait"); return -1; }
+
+		// Tentative de connexion apres destruction
+		if(m_connexion(name, O_WRONLY) != NULL){
+			perror("test_destruction : ECHEC : connexion possible apres destruction\n");
+			return -1;
+		}
+
+		// Test envoi d'un message sur file1 (doit toujours etre possible)
+		struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
+		if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
+		m->type = (long) getpid();
+		memmove( m->mtext, t, sizeof( t ));
+
+		if( m_envoi( file1, m, sizeof(t), 0) == -1 ){
+			printf("test_destruction() : ECHEC de l'envoi d'un message apres destruction de la file.\n"); return -1;
+		}
+	}
 
 	printf("test_destruction() : OK\n\n");
 	return 0;
@@ -622,35 +570,11 @@ int test_receptions_multiples(MESSAGE* file, int msg_nb){
 	*/
 	//fin debug
 
-	// debug : a mettre dans une fonction a part
-	// Receptions multiples alors qu'il y a bien des messages dans la file
-	for(int j = 2; j < msg_nb; j++){
-		long type;
-		if(j == 4){ type = -2; }
-		else{ type = abs((long) 1000 + pow(-2.0,(double) j)); }
+	// Teste la reception de multiples messages en mode non bloquant avec differentes valeurs de 'type'
+	if(test_reception_multiples_milieu(file, m1, size_msg, msg_nb, position1, position2, position3) == -1)
+		{return -1;}
 
-		ssize_t s = m_reception(file, m1, sizeof(t), type, O_NONBLOCK);
-
-		// Reception quand il n'y a pas de message de type demande (positif ou negatif), mode non bloquant
-		if(j == position1 || j == position2 || j == position3){
-			char text[] = "test_receptions_multiples() : ECHEC : gestion absence message type (non bloquant).";
-			if(error_check(text, s, EAGAIN) == -1) {return -1;}
-		}
-
-		// Reception des autres messages
-		else{
-			// Verifie les donnees des messages
-			char text0[] = "test_receptions_multiples() : ECHEC : reception multiples.";
-			if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], type) == -1) {return -1;}
-
-			// Verifie les offsets (case lue et case precedente)
-			char text1[] = "test_receptions_multiples() : ECHEC : offset derniere case lue.";
-			if(j > 6 && offset_check(file, text1, 0, size_msg * j) == -1) {return -1;}
-
-			char text2[] = "test_receptions_multiples() : ECHEC : offset precedente case lue.";
-			if(j > 6 && offset_check(file, text2, size_msg, size_msg * (j-1)) == -1) {return -1;}
-		}
-	}
+	// Verifie les index et offsets apres receptions multiples
 	if(test_receptions_multiples_fin(file, msg_nb, size_msg, position1, position2, position3) == -1)
 		{return -1;}
 
@@ -711,6 +635,39 @@ int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int
 	return 0;
 }
 
+// Teste la reception de multiples messages en mode non bloquant avec differentes valeurs de 'type'
+int test_reception_multiples_milieu(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb,
+		int position1, int position2, int position3){
+
+	for(int j = 2; j < msg_nb; j++){
+		long type;
+		if(j == 4){ type = -2; }
+		else{ type = abs((long) 1000 + pow(-2.0,(double) j)); }
+
+		ssize_t s = m_reception(file, m1, sizeof(t), type, O_NONBLOCK);
+
+		// Reception quand il n'y a pas de message de type demande (positif ou negatif), mode non bloquant
+		if(j == position1 || j == position2 || j == position3){
+			char text[] = "test_reception_multiples_milieu() : ECHEC : gestion absence message type (non bloquant).";
+			if(error_check(text, s, EAGAIN) == -1) {return -1;}
+		}
+
+		// Reception des autres messages
+		else{
+			// Verifie les donnees des messages
+			char text0[] = "test_reception_multiples_milieu() : ECHEC : reception multiples.";
+			if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], type) == -1) {return -1;}
+
+			// Verifie les offsets (case lue et case precedente)
+			char text1[] = "test_reception_multiples_milieu() : ECHEC : offset derniere case lue.";
+			if(j > 6 && offset_check(file, text1, 0, size_msg * j) == -1) {return -1;}
+
+			char text2[] = "test_reception_multiples_milieu() : ECHEC : offset precedente case lue.";
+			if(j > 6 && offset_check(file, text2, size_msg, size_msg * (j-1)) == -1) {return -1;}
+		}
+	}
+	return 0;
+}
 
 // Verifie les index et offsets apres receptions multiples
 int test_receptions_multiples_fin(MESSAGE* file, int msg_nb, size_t size_msg,

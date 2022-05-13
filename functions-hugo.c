@@ -124,26 +124,27 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 
 }
 
-void connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
-	if(is_o_wronly(options)){
-		options = O_RDWR;
-	}
+int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
+
+	if(is_o_wronly(options)){ options = O_RDWR; }
+
 	int fd = shm_open(nom, options, 0);
-	if( fd == -1 ){ perror("shm_open"); exit(1);}
+	if( fd == -1 && errno == EEXIST) { printf("La file existe deja et drapeau O_EXCL.\n"); return -1; }
+	if( fd == -1 && errno == ENOENT) { printf("La file n'existe pas et pas de drapeau O_CREAT.\n"); return -1; }
+	else if( fd == -1 ){ perror("shm_open dans connex_msg"); exit(EXIT_FAILURE); }
+
 	struct stat bufStat;
 	fstat(fd, &bufStat);
 
 	int prot = build_prot(options);
 
 	addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0);
-	if( (void*) addr == MAP_FAILED) {
-		perror("Function mmap()");
-		exit(EXIT_FAILURE);
-	}
+	if( (void*) addr == MAP_FAILED) { perror("Function mmap()"); exit(EXIT_FAILURE); }
 
 	msg->memory_size = sizeof(header) + addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
 	msg->flag = options;
 	msg->shared_memory = addr;
+	return 0;
 }
 
 MESSAGE *m_connexion(const char *nom, int options, ...){
@@ -151,11 +152,11 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 	MESSAGE *msg = malloc(sizeof(MESSAGE));
 	line *addr = NULL;
 
-    if(is_o_creat(options)){ //il faut le creer s'il n'existe pas
-    	if(is_o_rdonly(options)){
-    		// on empêche de créer un fichier vituelle en lecture seulement
-    		return NULL;
-    	}
+    if(is_o_creat(options)){ //il faut creer la file si elle n'existe pas
+
+		// on empeche de creer une file en lecture seule
+    	if(is_o_rdonly(options)){ return NULL; }
+
     	va_list parametersInfos;
     	va_start(parametersInfos, options);
 
@@ -166,16 +167,13 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     	build_msg(msg, addr, nom, options, nb_msg, len_max, mode);
 
 		va_end(parametersInfos);
+    }
+    else if(!is_o_creat(options) && nom != NULL){ // si la file existe
+    	if(connex_msg(msg, addr, nom, options) == -1) { return NULL; }
+    }
+    else{ return NULL; }
 
-    }
-    else if(!is_o_creat(options) && nom!=NULL){ // il existe
-    	connex_msg(msg, addr, nom, options);
-    }
-    else{
-    	return NULL;
-    }
 	return msg;
-
 }
 
 
@@ -188,13 +186,6 @@ int m_deconnexion(MESSAGE *file){
 int m_destruction(const char *nom){
 	return shm_unlink(nom);
 }
-
-/*
-debug
-Unmap the shared memory with munmap().
-Close the shared memory object with close().
-Delete the shared memory object with shm_unlink().
- */
 
 int initialiser_mutex(pthread_mutex_t *pmutex){
 	pthread_mutexattr_t mutexattr;
