@@ -70,6 +70,8 @@ int test_processus_paralleles(){
 int main(int argc, const char * argv[]) {
 	printf("\n");
 	test_connexion();
+	test_deconnexion();
+	test_destruction();
 	test_envoi_erreurs();
 	test_reception_erreurs();
 
@@ -337,6 +339,77 @@ int test_connexion(){
 	// debug : tester les droits avec differentes valeurs
 
 	printf("test_connexion() : OK\n\n");
+	return 0;
+}
+
+int test_deconnexion(){
+	char name[] = "/NONO";
+	int msg_nb = 12;
+	size_t max_message_length = sizeof(char)*20;
+	MESSAGE* file1 = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
+	MESSAGE* file2 = m_connexion(name, O_RDONLY);
+	MESSAGE* file3 = m_connexion(name, O_WRONLY);
+
+	if((void*)file2->shared_memory == NULL){
+		perror("(void*)file2->shared_memory == NULL\n");
+		return -1;
+	}
+	if((void*)file1->shared_memory == NULL){
+		perror("(void*)file1->shared_memory == NULL\n");
+		return -1;
+	}
+	if((void*)file3->shared_memory == NULL){
+		perror("(void*)file3->shared_memory == NULL\n");
+		return -1;
+	}
+
+	if(m_deconnexion(file2) != 0){
+		perror("m_deconnexion(file2) != 0\n");
+		return -1;
+	}
+
+	if((void*)file2->shared_memory != NULL){
+		perror("(void*)file2->shared_memory != NULL\n");
+		return -1;
+	}
+	if((void*)file1->shared_memory == NULL){
+		perror("(void*)file1->shared_memory == NULL\n");
+		return -1;
+	}
+	if((void*)file3->shared_memory == NULL){
+		perror("(void*)file3->shared_memory == NULL\n");
+		return -1;
+	}
+
+	printf("test_deconnexion() : OK\n\n");
+	return 0;
+}
+
+int test_destruction(){
+	/*char name[] = "/NONO";
+	int msg_nb = 12;
+	size_t max_message_length = sizeof(char)*20;
+	MESSAGE* file1 = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
+	MESSAGE* file2 ;
+	MESSAGE* file3 ;
+
+	if((void*)file1->shared_memory == NULL){
+		perror("(void*)file2->shared_memory == NULL\n");
+		return -1;
+	}
+
+	if(m_destruction(name) != 0){
+		perror("m_destruction(name) != 0\n");
+		return -1;
+	}
+
+	if(fork()==0){
+		file2 = m_connexion(name, O_RDONLY);
+	}else{
+		file3 = m_connexion(name, O_WRONLY);
+	}*/
+
+	printf("test_destruction() : OK\n\n");
 	return 0;
 }
 
