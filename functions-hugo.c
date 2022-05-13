@@ -70,6 +70,7 @@ int build_prot(int options){
 
 	if(is_o_excl(options)){
 		prot = prot | PROT_EXEC;
+
 	}
 	return prot;
 }
@@ -116,7 +117,7 @@ int is_o_excl(int options){
 
 int private_or_shared(const char *nom){
 	if(nom==NULL){
-		return MAP_SHARED | MAP_ANON;
+		return MAP_SHARED | MAP_ANONYMOUS;
 	}
 	return MAP_SHARED;
 }
@@ -136,6 +137,7 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 	fstat(fd, &bufStat);
 
 	int prot = build_prot(options);
+
 	int map_flag = private_or_shared(nom);
 	addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
 
@@ -172,12 +174,16 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 }
 
 void connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
+	if(is_o_wronly(options)){
+		options = O_RDWR;
+	}
 	int fd = shm_open(nom, options, 0);
 	if( fd == -1 ){ perror("shm_open"); exit(1);}
 	struct stat bufStat;
 	fstat(fd, &bufStat);
 
 	int prot = build_prot(options);
+
 	addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0);
 	if( (void*) addr == MAP_FAILED) {
 		perror("Function mmap()");
