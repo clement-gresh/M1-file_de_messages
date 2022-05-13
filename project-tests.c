@@ -220,6 +220,10 @@ int sous_test_connexion_3(){
 		printf("sous_test_connexion3() : ECHEC : NULL\n");
 		return -1;
 	}
+	if(file->shared_memory->head.max_length_message != 20){
+		printf("sous_test_connexion3() : ECHEC : file->shared_memory->head.max_length_message != 20\n");
+		return -1;
+	}
 	printf("sous_test_connexion3() : OK\n");
 	return 0;
 }

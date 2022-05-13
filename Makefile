@@ -1,5 +1,5 @@
 CPP=gcc # g++ ?
-CFLAGS= -Wall -g -pedantic
+CFLAGS= -Wall -std=gnu11 -g -pedantic 
 LDLIBS = -pthread
 LIBS = -lrt -lm
 

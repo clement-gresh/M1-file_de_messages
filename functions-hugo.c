@@ -218,13 +218,11 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 
     }
     else if(!is_o_creat(options) && nom!=NULL){ // il existe
-    	MESSAGE *msg = malloc(sizeof(MESSAGE));
     	connex_msg(msg, addr, nom, options);
     }
     else{
     	return NULL;
     }
-
 	return msg;
 
 }
