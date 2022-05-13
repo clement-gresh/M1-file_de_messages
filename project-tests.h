@@ -22,5 +22,7 @@ int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int
 int test_receptions_multiples_fin(MESSAGE* file, int msg_nb, size_t size_msg,
 		int position1, int position2, int position3);
 int test_compact_messages();
+int test_deconnexion();
+int test_destruction();
 
 #endif /* PROJECT_TESTS_H_ */
