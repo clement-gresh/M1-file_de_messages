@@ -137,11 +137,14 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	char *messages = file->shared_memory->messages;
 	header *head = &file->shared_memory->head;
 
+	printf("avant m_reception_erreurs\n"); // debug
 	// Verification de l'absence d'erreurs dans les paramtres d'appel
 	if(m_reception_erreurs(file, flags) != 0){ return -1; }
+	printf("apres m_reception_erreurs\n"); // debug
 
 	// Lock du mutex
 	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
+	printf("apres lock mutex\n"); // debug
 
 	// MAJ de la liste types_searched
 	bool type_found = false;
@@ -170,6 +173,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 		return my_error("Plus de place dans types_searched[] pour le type recherche.\n", file, NO_DECR, 0, UNLOCK, 'w', -1);
 	}
 
+	printf("apres maj type_searched\n"); // debug
 
 	// Recherche d'un message a lire et attente s'il n'y en a pas (sauf si O_NONBLOCK)
 	int current = m_reception_recherche(file, type, flags);
@@ -230,18 +234,14 @@ int my_error(char *txt, MESSAGE *file, bool decrease, long type, bool unlock, ch
 		head->types_searched[i].number--;
 	}
 	if(unlock){
-		printf("test unlock\n"); // debug
 		if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 	}
 	if(signal=='r' || signal == 'b'){
 		if(pthread_cond_signal(&head->rcond) > 0){ perror("signal rcond"); exit(-1); }
 	}
 	if(signal=='w' || signal == 'b'){
-		printf("signal write\n"); // debug
 		if(pthread_cond_signal(&head->wcond) > 0){ perror("signal wcond"); exit(-1); }
 	}
-
-	printf("avant errno\n"); // debug
 	if(error > 0) { errno = error; }
 	return -1;
 }
@@ -356,12 +356,14 @@ int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag){
 }
 
 
-// FONCTIONS AUXILIAIRES DE M_RECHERCHE
 
 // Verifie l'absence d'erreur dans les parametres d'appel de m_reception
 int m_reception_erreurs(MESSAGE *file, int flags){
+	printf("dans m_reception_erreur\n"); // debug
 	if(file->flag == O_WRONLY){
+		printf("avant my_error\n"); // debug
 		return my_error("Impossible de lire les message de cette file.\n", file, NO_DECR, 0, NO_UNLOCK, 'w', EPERM);
+		printf("apres my_error\n"); // debug
 	}
 	if(flags != 0 && flags != O_NONBLOCK){
 		return my_error("Valeur de msgflag incorrecte dans m_reception.\n", file, NO_DECR, 0, NO_UNLOCK, 'b', EIO);
