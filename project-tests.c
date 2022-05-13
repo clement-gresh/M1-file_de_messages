@@ -301,12 +301,14 @@ int test_envoi_erreurs(){
 	if(error_check("test_envoi_erreurs() : ECHEC : gestion envoi avec mauvais drapeau.", i, EIO) == -1) {return -1;}
 
 	// Test file Read Only
-	/*
+	printf("test1\n");
 	MESSAGE* file1 = m_connexion("/envoi_erreurs_3", O_RDONLY);
+	printf("test2\n");
 	i = m_envoi( file1, m, sizeof(t), O_NONBLOCK);
+	printf("test3\n");
 	char text[] = "test_envoi_erreurs() : ECHEC : gestion envoi dans un tableau read only.";
 	if(error_check(text, i, EPERM) == -1) {return -1;}
-	*/
+
 	printf("test_envoi_erreurs() : OK\n\n");
 	return 0;
 }
@@ -396,7 +398,7 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 int test_reception_erreurs(){
 	struct mon_message *m1 = malloc( sizeof( struct mon_message ) + sizeof(t));
 
-	// Test envoi avec drapeau incorrect
+	// Test reception avec drapeau incorrect
 	MESSAGE* file = m_connexion("/reception_erreurs_1", O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 	ssize_t s = m_reception(file, m1, sizeof(t), 0, O_RDWR);
@@ -405,14 +407,16 @@ int test_reception_erreurs(){
 
 	// Test file Write Only
 	/*
+	printf("\n\navant m_connexion\n"); // debug
 	MESSAGE* file1 = m_connexion("/reception_erreurs_1", O_WRONLY);
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
+	printf("\n\navant m_reception /!\\/!\\/!\\\n"); // debug
 	s = m_reception(file1, m1, sizeof(t), 0, 0);
+	printf("apres m_reception\n"); // debug
 	if(error_check("test_reception_erreurs() : ECHEC : gestion lecture quand Write Only.", s, EPERM) == -1)
 		{return -1;}
 	*/
-
 	// Test reception si la longueur de la memoire a l'adresse msg est plus petite que le message a lire : debug
 
 	printf("test_reception_erreurs() : OK\n\n");

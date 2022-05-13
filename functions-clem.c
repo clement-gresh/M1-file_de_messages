@@ -94,8 +94,10 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	char *messages = file->shared_memory->messages;
 	struct header *head = &file->shared_memory->head;
 	size_t msg_size = sizeof(mon_message) + len;
+
 	// Verification de l'absence d'erreurs dans les paramtres d'appel
 	if(m_envoi_erreurs(file, len, msgflag) != 0){ return -1; }
+	printf("test apres m_envoi_erreur"); // debug
 
 	// Lock du mutex
 	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
@@ -135,9 +137,11 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	char *messages = file->shared_memory->messages;
 	header *head = &file->shared_memory->head;
+	printf("avant reception erreur\n"); // debug
 
 	// Verification de l'absence d'erreurs dans les paramtres d'appel
 	if(m_reception_erreurs(file, flags) != 0){ return -1; }
+	printf("apres reception erreur\n"); // debug
 
 	// Lock du mutex
 	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
@@ -218,8 +222,10 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 int my_error(char *txt, MESSAGE *file, bool decrease, long type, bool unlock, char signal, int error){
 	struct header *head = &file->shared_memory->head;
 	printf("%s", txt);
+	printf("test my_error\n"); // debug
 
 	if(decrease){
+		printf("test decrease\n"); // debug
 		int i = 0;
 		while(head->types_searched[i].type != type && i != TYPE_SEARCH_NB){ i++; }
 
@@ -229,15 +235,20 @@ int my_error(char *txt, MESSAGE *file, bool decrease, long type, bool unlock, ch
 		head->types_searched[i].number--;
 	}
 	if(unlock){
+		printf("test unlock\n"); // debug
 		if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 	}
 	if(signal=='r' || signal == 'b'){
 		if(pthread_cond_signal(&head->rcond) > 0){ perror("signal rcond"); exit(-1); }
 	}
 	if(signal=='w' || signal == 'b'){
+		printf("signal write\n"); // debug
 		if(pthread_cond_signal(&head->wcond) > 0){ perror("signal wcond"); exit(-1); }
 	}
+
+	printf("avant errno\n"); // debug
 	if(error > 0) { errno = error; }
+	printf("apres errno\n"); // debug
 	return -1;
 }
 
@@ -249,7 +260,7 @@ int m_envoi_erreurs(MESSAGE *file, size_t len, int msgflag){
 	struct header *head = &file->shared_memory->head;
 
 	if(file->flag == O_RDONLY){
-		return my_error("Impossible d'ecrire dans cette file.\n", file, NO_DECR, 0, NO_UNLOCK, 'w', EPERM);
+		return my_error("Impossible d'ecrire dans cette file.\n", file, NO_DECR, 0, NO_UNLOCK, 'n', EPERM);
 	}
 	if(len > head->max_length_message){
 		return my_error("La taille du message excede la taille maximale.\n", file, NO_DECR, 0, NO_UNLOCK, 'b', EMSGSIZE);
@@ -355,9 +366,12 @@ int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag){
 
 // Verifie l'absence d'erreur dans les parametres d'appel de m_reception
 int m_reception_erreurs(MESSAGE *file, int flags){
+	printf("reception erreur\n"); // debug
 	if(file->flag == O_WRONLY){
+		printf("avant my_error\n"); // debug
 		return my_error("Impossible de lire les message de cette file.\n", file, NO_DECR, 0, NO_UNLOCK, 'w', EPERM);
 	}
+	printf("apres my error\n"); // debug
 	if(flags != 0 && flags != O_NONBLOCK){
 		return my_error("Valeur de msgflag incorrecte dans m_reception.\n", file, NO_DECR, 0, NO_UNLOCK, 'b', EIO);
 	}
