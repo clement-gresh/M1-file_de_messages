@@ -26,7 +26,7 @@
 
 // STRUCTURES
 // Permet de stocker les info utiles quand un processus s'enregistre sur la file
-typedef struct record{ // debug : pas FIFO
+typedef struct record{
 	pid_t pid;						// pid du processus s'etant enregistre pour recevoir un signal
 	int signal;						// signal a envoye au processus quand un message est disponible
 	long type;						// type de message voulu par le processus
@@ -56,8 +56,8 @@ typedef struct header{
 	pthread_cond_t rcond;
 	pthread_cond_t wcond;
 	record records[RECORD_NB];						// Liste des processus enregistres pour recevoir un signal
-	type_search types_searched[TYPE_SEARCH_NB];		// Liste des 'types' de messages voulus par les proc. en attente sur la file
-} header;
+	type_search types_searched[TYPE_SEARCH_NB];		// Liste des 'types' de messages voulus par les processus en train
+} header;																		// de faire m_reception sur la file
 
 typedef struct line{
 	struct header head;
@@ -83,6 +83,9 @@ size_t m_message_len(MESSAGE *);
 size_t m_capacite(MESSAGE *);
 size_t m_nb(MESSAGE *);
 
+int m_enregistrement(MESSAGE *file, long type, int sig);			// Notifications
+void m_annulation(MESSAGE *file);									// Notifications
+
 
 // FONCTIONS AUXILIAIRES
 int initialiser_mutex(pthread_mutex_t *pmutex);
@@ -96,6 +99,7 @@ int m_reception_erreurs(MESSAGE *file, int flags);
 void m_reception_occupees(MESSAGE *file, int current);
 void m_reception_libres(MESSAGE *file, int current);
 int m_reception_recherche(MESSAGE *file, long type, int flags);
+int m_enregistrement_signal(MESSAGE *file);
 int is_o_creat(int options);
 int is_o_rdonly(int options);
 int is_o_wronly(int options);
