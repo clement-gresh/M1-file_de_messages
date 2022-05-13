@@ -13,17 +13,57 @@ int t[4] = {-12, 99, 134, 543};
 // Envoie puis recoit des messages petits pour verifier qu'on peut envoyer plus que nb_msg (memoire compacte)
 // puis envoie des messages plus gros : verifier que la fonction fct_met_tout_a_gauche fonctionne
 
-/*
+
 int test_processus_paralleles(){
 	// 2 proc creent / se connectent a une file
 	// ils envoient 1000 messages
 	// 2 proc en reçoivent 500 pendant que les 2 premiers continuent à en envoyer 500 en mode bloquant
 	// il y a seulement 1000 places pour les messages
+	int nbr_msg = 1000;
+	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
 
+	// message a envoyer
+	struct mon_message *me = malloc(size_msg);
+	if( me == NULL ){ perror("Function test malloc()"); exit(-1); }
+	memmove( me->mtext, t, sizeof( t ));
+
+	// structure pour recevoir un message
+	struct mon_message *mr = malloc(size_msg);
+
+	MESSAGE* file = m_connexion(NULL, O_RDWR | O_CREAT, nbr_msg, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+
+	// Le pere cree un fils A
+	pid_t pidA = fork();
+	if(pidA == -1){ perror("test_processus_paralleles fork() A"); exit(-1); }
+
+	// Le pere et A creent tous les 2 un fils B
+	pid_t pidB = fork();
+	if(pidB == -1){ perror("test_processus_paralleles fork() B"); exit(-1); }
+
+	// Les 2 fils B : chacun receptionne (en mode bloquant) le nombre maximal de messages que peut contenir la file
+	if(pidB == 0){
+		for(int j = 0; j < nbr_msg; j++){
+			if( m_reception(file, mr, sizeof(t), 0, 0) <= 0 ){
+				printf("test_processus_paralleles() : ECHEC : receptions messages n %d.\n", j + 1); return -1;
+			}
+		}
+		_exit(0);
+	}
+	// Pere et fils A : chacun envoie (en mode bloquant) le nombre maximal de messages que peut contenir la file
+	else if(pidB > 0){
+		for(int j = 0; j < nbr_msg; j++){
+			if( m_envoi( file, me, sizeof(t), 0) != 0 ){
+				printf("test_processus_paralleles() : ECHEC : envois messages n %d.\n", j + 1); return -1;
+			}
+		}
+		// Le fils A
+		if(pidA == 0){
+			_exit(0);
+		}
+	}
 	printf("test_processus_paralleles() : OK\n");
 	return 0;
 }
-*/
 
 int main(int argc, const char * argv[]) {
 	printf("\n");
@@ -39,6 +79,7 @@ int main(int argc, const char * argv[]) {
 	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
+	//test_processus_paralleles();
 	test_compact_messages();
 
 	return EXIT_SUCCESS;
