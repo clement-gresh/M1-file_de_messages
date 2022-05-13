@@ -58,18 +58,18 @@ int BitAt(long unsigned int x, int i){
 int build_prot(int options){
 	int prot = 0;
 
-	if(is_o_excl(options)){
-		prot |= PROT_EXEC;
-	}
-
 	if(is_o_rdwr(options)){
-		prot |= PROT_READ | PROT_WRITE;
+		prot = PROT_READ | PROT_WRITE;
 	}
 	else if(is_o_rdonly(options)){
-		prot |= PROT_READ;
+		prot = PROT_READ;
 	}
 	else if(is_o_wronly(options)){
-		prot |= PROT_WRITE;
+		prot = PROT_WRITE;
+	}
+
+	if(is_o_excl(options)){
+		prot = prot | PROT_EXEC;
 	}
 	return prot;
 }
@@ -123,6 +123,72 @@ int private_or_shared(const char *nom){
 
 // nom doit commencer par un unique /
 //size_t nb_msg, size_t len_max, mode_t mode
+
+void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
+
+	msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message)); // debug : memory_size - sizeof(header)
+	msg->flag = options;
+
+	int fd = shm_open(nom, options, mode);
+	if( fd == -1 ){ perror("shm_open"); exit(1);}
+	if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
+	struct stat bufStat;
+	fstat(fd, &bufStat);
+
+	int prot = build_prot(options);
+	int map_flag = private_or_shared(nom);
+	addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
+
+	if( (void*) addr == MAP_FAILED) {
+		perror("Function mmap()");
+		exit(EXIT_FAILURE);
+	}
+
+	msg->shared_memory = addr;
+	msg->shared_memory->head.max_length_message = len_max;
+	msg->shared_memory->head.pipe_capacity = nb_msg;
+	msg->shared_memory->head.first_occupied = -1;
+	msg->shared_memory->head.last_occupied = -1;
+	msg->shared_memory->head.first_free = 0;
+	msg->shared_memory->head.last_free = 0;
+
+	// La place disponible pour les messages
+	((mon_message *)&msg->shared_memory->messages[0])->length = nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
+	((mon_message *)&msg->shared_memory->messages[0])->offset = 0;
+
+	// Initialisation du mutex et des conditions
+	if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
+	if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
+	if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
+
+	// Initialisations des tableaux pour les notifications
+	for(int i = 0; i < RECORD_NB; i++){ msg->shared_memory->head.records[i].pid = -1; }
+
+	for(int i = 0; i < TYPE_SEARCH_NB; i++){
+		msg->shared_memory->head.types_searched[i].number = 0;
+		msg->shared_memory->head.types_searched[i].type = 0;
+	}
+
+}
+
+void connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
+	int fd = shm_open(nom, options, 0);
+	if( fd == -1 ){ perror("shm_open"); exit(1);}
+	struct stat bufStat;
+	fstat(fd, &bufStat);
+
+	int prot = build_prot(options);
+	addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0);
+	if( (void*) addr == MAP_FAILED) {
+		perror("Function mmap()");
+		exit(EXIT_FAILURE);
+	}
+
+	msg->memory_size = sizeof(header) + addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
+	msg->flag = options;
+	msg->shared_memory = addr;
+}
+
 MESSAGE *m_connexion(const char *nom, int options, ...){
 
 	MESSAGE *msg = malloc(sizeof(MESSAGE));
@@ -139,69 +205,15 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     	size_t nb_msg = va_arg(parametersInfos, size_t);
     	size_t len_max = va_arg(parametersInfos, size_t);
     	mode_t mode = va_arg(parametersInfos, mode_t);
-		msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message)); // debug : memory_size - sizeof(header)
-		msg->flag = options;
-
-		int fd = shm_open(nom, options, mode);
-		if( fd == -1 ){ perror("shm_open"); exit(1);}
-		if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
-		struct stat bufStat;
-		fstat(fd, &bufStat);
-
-		int prot = build_prot(options);
-		int map_flag = private_or_shared(nom);
-		addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
-
-		if( (void*) addr == MAP_FAILED) {
-			perror("Function mmap()");
-			exit(EXIT_FAILURE);
-		}
-	
-		msg->shared_memory = addr;
-		msg->shared_memory->head.max_length_message = len_max;
-		msg->shared_memory->head.pipe_capacity = nb_msg;
-		msg->shared_memory->head.first_occupied = -1;
-		msg->shared_memory->head.last_occupied = -1;
-		msg->shared_memory->head.first_free = 0;
-		msg->shared_memory->head.last_free = 0;
-
-		// La place disponible pour les messages
-		((mon_message *)&msg->shared_memory->messages[0])->length = nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
-		((mon_message *)&msg->shared_memory->messages[0])->offset = 0;
-
-		// Initialisation du mutex et des conditions
-		if(initialiser_mutex(&addr->head.mutex) > 0){ perror("init mutex"); exit(1); }
-		if(initialiser_cond( &addr->head.rcond ) > 0){ perror("init mutex"); exit(1); }
-		if(initialiser_cond( &addr->head.wcond ) > 0){ perror("init mutex"); exit(1); }
-
-		// Initialisations des tableaux pour les notifications
-		for(int i = 0; i < RECORD_NB; i++){ msg->shared_memory->head.records[i].pid = -1; }
-
-		for(int i = 0; i < TYPE_SEARCH_NB; i++){
-			msg->shared_memory->head.types_searched[i].number = 0;
-			msg->shared_memory->head.types_searched[i].type = 0;
-		}
+		
+    	build_msg(msg, addr, nom, options, nb_msg, len_max, mode);
 
 		va_end(parametersInfos);
 
     }
     else if(!is_o_creat(options) && nom!=NULL){ // il existe
     	MESSAGE *msg = malloc(sizeof(MESSAGE));
-		int fd = shm_open(nom, options, 0);
-		if( fd == -1 ){ perror("shm_open"); exit(1);}
-		struct stat bufStat;
-		fstat(fd, &bufStat);
-
-		int prot = build_prot(options);
-		addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0);
-		if( (void*) addr == MAP_FAILED) {
-			perror("Function mmap()");
-			exit(EXIT_FAILURE);
-		}
-
-		msg->memory_size = sizeof(header) + addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
-		msg->flag = options;
-		msg->shared_memory = addr;
+    	connex_msg(msg, addr, nom, options);
     }
     else{
     	return NULL;
