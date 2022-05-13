@@ -406,17 +406,15 @@ int test_reception_erreurs(){
 		{return -1;}
 
 	// Test file Write Only
-	/*
-	printf("\n\navant m_connexion\n"); // debug
+	
 	MESSAGE* file1 = m_connexion("/reception_erreurs_1", O_WRONLY);
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
-	printf("\n\navant m_reception /!\\/!\\/!\\\n"); // debug
 	s = m_reception(file1, m1, sizeof(t), 0, 0);
-	printf("apres m_reception\n"); // debug
+	
 	if(error_check("test_reception_erreurs() : ECHEC : gestion lecture quand Write Only.", s, EPERM) == -1)
 		{return -1;}
-	*/
+	
 	// Test reception si la longueur de la memoire a l'adresse msg est plus petite que le message a lire : debug
 
 	printf("test_reception_erreurs() : OK\n\n");
