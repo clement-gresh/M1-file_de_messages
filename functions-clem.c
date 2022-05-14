@@ -2,7 +2,9 @@
 
 // <>
 
-
+// Enregistre sur la file d'attente un processus qui souhaite recevoir un signal 'sig' lorsqu'un message
+// de type 'type' est disponible
+// Rretour : 0 en cas de succès, -1 sinon
 int m_enregistrement(MESSAGE *file, long type, int sig){
 	struct header *head = &file->shared_memory->head;
 	int current = 0;
@@ -19,6 +21,7 @@ int m_enregistrement(MESSAGE *file, long type, int sig){
 	return -1;
 }
 
+// Enleve le processus de la file d'attente (y compris si il y apparait plusieurs fois)
 void m_annulation(MESSAGE *file){
 	struct header *head = &file->shared_memory->head;
 
@@ -29,35 +32,35 @@ void m_annulation(MESSAGE *file){
 	}
 }
 
-
-int m_enregistrement_signal(MESSAGE *file){
+// Envoi un signal aux processus enregistres sur la file d'attente apres avoir verifie si les conditions sont satisfaites
+void m_envoi_signal(MESSAGE *file){
 	struct header *head = &file->shared_memory->head;
 
 	for(int i = 0; i < RECORD_NB; i++){
+		// Recherche si un processus est enregistre pour ce type de message
 		if(head->records[i].pid != -1){
 			bool can_signal = true;
 			int k = 0;
 
+			// Verifie qu'il n'y a aucun pocessus suspendu en attente de ce message
 			while(k < TYPE_SEARCH_NB){
-				if((head->types_searched[k].type == 0
+				if(head->types_searched[k].number > 0 &&
+						(head->types_searched[k].type == 0
 						|| head->types_searched[k].type == head->records[i].type
-						|| -head->types_searched[k].type > head->records[i].type)
-					&& head->types_searched[k].number > 0
-					){
+						|| -head->types_searched[k].type > head->records[i].type))
+				{
 					can_signal = false;
 					break;
 				}
 				k++;
 			}
-
+			// Envoie le signal au processus si les conditions sont verifies
 			if(can_signal){
 				kill(head->records[i].pid, head->records[i].signal);
 				head->records[i].pid = -1;
 			}
 		}
 	}
-
-	return 0;
 }
 
 
@@ -125,6 +128,9 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	// Synchronise la memoire
 	//if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) { perror("m_envoi() -> msync()"); exit(-1); }
 
+	// Signale les processus qui sont sur la liste d'attente si besoin
+	m_envoi_signal(file);
+
 	// Signale un processus attendant de pouvoir recevoir
 	if(pthread_cond_signal(&head->rcond) > 0) {perror("signal rcond"); exit(-1); }
 
@@ -154,7 +160,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	// Erreur si buffer trop petit pour recevoir le message
 	ssize_t msg_size = ((mon_message *)&messages[current])->length;
 	if(msg_size > len){
-		return my_error("Memoire allouee trop petite pour recevoir le message.", file, DECR, type, UNLOCK, 'b', EMSGSIZE);
+		return my_error("Memoire allouee trop petite pour recevoir le message.\n", file, DECR, type, UNLOCK, 'b', EMSGSIZE);
 	}
 
 	// Maj de la liste chainee des cases occupees

@@ -44,6 +44,6 @@ int test_receptions_multiples_fin(MESSAGE* file, int msg_nb, size_t size_msg,
 int test_compact_messages();
 
 // Parallelisme
-int test_processus_paralleles();
+int test_processus_paralleles(int msg_nb);
 
 #endif /* PROJECT_TESTS_H_ */

@@ -20,15 +20,15 @@ int main(int argc, const char * argv[]) {
 	test_deconnexion();
 	test_destruction();
 
-	// Teste la bonne gestion des erreurs pour l'envoi et la reception
-	test_envoi_erreurs();
-	test_reception_erreurs();
-
 	// Teste l'envoi et la reception
 	char name1[] = "/envoi";
 	MESSAGE* file = m_connexion(name1, O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envoi(file);
 	test_reception(file);
+
+	// Teste la bonne gestion des erreurs pour l'envoi et la reception
+	test_envoi_erreurs();
+	test_reception_erreurs();
 
 	// Teste l'envoi et la reception de multiples messages
 	char name2[] = "/tests_multiples";
@@ -38,7 +38,8 @@ int main(int argc, const char * argv[]) {
 	test_receptions_multiples(file2, msg_nb);
 	test_compact_messages();
 
-	for(int i = 0; i < 10; i++){ test_processus_paralleles(); }
+	// Teste la gestion de envoi et reception sur des processus en parallele
+	for(int i = 0; i < 10; i++){ test_processus_paralleles(500); }
 	printf("\n");
 
 	// Destruction des files
@@ -768,8 +769,7 @@ int test_compact_messages(){
 // PARALLELISME
 // Test l'envoi et la reception par des processus en parallele
 // 4 processus en parallele : 2 envoient le nombre maximum de message et 2 en receptionne le nombre maximum (en mode bloquant)
-int test_processus_paralleles(){
-	int nbr_msg = 500;
+int test_processus_paralleles(int msg_nb){
 	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
 
 	// message a envoyer
@@ -782,7 +782,7 @@ int test_processus_paralleles(){
 	char name[] = "/processus_paralleles";
 
 	// Creation de la file
-	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, nbr_msg, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	// debug : mettre une file anonyme
 
 	// Le pere cree un fils A
@@ -795,7 +795,7 @@ int test_processus_paralleles(){
 
 	// Les 2 fils B : chacun RECEPTIONNE (en mode bloquant) le nombre maximal de messages que peut contenir la file
 	if(pidB == 0){
-		for(int j = 0; j < nbr_msg; j++){
+		for(int j = 0; j < msg_nb; j++){
 			if( m_reception(file, mr, sizeof(t), 0, 0) == 0 ){
 				printf("test_processus_paralleles() : ECHEC : receptions messages n %d.\n", j + 1); _exit(-1);
 			}
@@ -804,7 +804,7 @@ int test_processus_paralleles(){
 	}
 	// Pere et fils A : chacun ENVOIE (en mode bloquant) le nombre maximal de messages que peut contenir la file
 	else if(pidB > 0){
-		for(int j = 0; j < nbr_msg; j++){
+		for(int j = 0; j < msg_nb; j++){
 			if( m_envoi( file, me, sizeof(t), 0) != 0 ){
 				printf("test_processus_paralleles() : ECHEC : envois messages n %d.\n", j + 1);
 				if(pidA == 0){ _exit(-1); }
