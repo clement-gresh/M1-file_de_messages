@@ -12,68 +12,6 @@ int t[4] = {-12, 99, 134, 543};
 // Envoie puis recoit des messages petits pour verifier qu'on peut envoyer plus que nb_msg (memoire compacte)
 // puis envoie des messages plus gros : verifier que la fonction fct_met_tout_a_gauche fonctionne
 
-// Test l'envoi et la reception par des processus en parallele
-// 4 processus en parallele : 2 envoient le nombre maximum de message et 2 en receptionne le nombre maximum (mode bloquant)
-int test_processus_paralleles(){
-	int nbr_msg = 500;
-	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
-
-	// message a envoyer
-	struct mon_message *me = malloc(size_msg);
-	if( me == NULL ){ perror("Function test malloc()"); exit(-1); }
-	memmove( me->mtext, t, sizeof( t ));
-
-	// structure pour recevoir un message
-	struct mon_message *mr = malloc(size_msg);
-	char name[] = "/processus_paralleles";
-	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, nbr_msg, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
-	// debug : mettre une file anonyme
-
-	// Le pere cree un fils A
-	pid_t pidA = fork();
-	if(pidA == -1){ perror("test_processus_paralleles fork() A"); exit(-1); }
-
-	// Le pere et A creent tous les 2 un fils B
-	pid_t pidB = fork();
-	if(pidB == -1){ perror("test_processus_paralleles fork() B"); exit(-1); }
-
-	// Les 2 fils B : chacun RECEPTIONNE (en mode bloquant) le nombre maximal de messages que peut contenir la file
-	if(pidB == 0){
-		for(int j = 0; j < nbr_msg; j++){
-			if( m_reception(file, mr, sizeof(t), 0, 0) == 0 ){
-				printf("test_processus_paralleles() : ECHEC : receptions messages n %d.\n", j + 1); _exit(-1);
-			}
-		}
-		_exit(0);
-	}
-	// Pere et fils A : chacun ENVOIE (en mode bloquant) le nombre maximal de messages que peut contenir la file
-	else if(pidB > 0){
-		for(int j = 0; j < nbr_msg; j++){
-			if( m_envoi( file, me, sizeof(t), 0) != 0 ){
-				printf("test_processus_paralleles() : ECHEC : envois messages n %d.\n", j + 1);
-				if(pidA == 0){ _exit(-1); }
-				return -1;
-			}
-		}
-		// Le fils A
-		if(pidA == 0){ _exit(0); }
-	}
-	int status;
-	while(wait(&status) > 0)
-		if(status == -1) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
-	if(status == -1) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
-	if(errno != ECHILD) { printf("test_processus_paralleles() : ECHEC : wait ECHILD\n"); return(-1);}
-
-	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
-
-	// Debug : verifier les valeurs de retour des enfants pour voir si le test a reussi
-
-	// DEBUG : verifier les valeurs des messages et des types lors de la reception
-
-	printf("test_processus_paralleles() : OK\n");
-	return 0;
-}
-
 int main(int argc, const char * argv[]) {
 	printf("\n");
 
@@ -115,10 +53,10 @@ int main(int argc, const char * argv[]) {
 // Verifie les valeurs du message recu (type, length, etc.)
 int reception_check(mon_message *m1, char text[], ssize_t s, ssize_t size, size_t length, int value2, long type){
 	if(s != size || m1->length != length || ((int*)m1->mtext)[2] != value2 || m1->type != type){
-		printf("%s\n\n", text);
+		printf("%s\n", text);
 		printf("Valeurs attendues : retour %ld, length %ld, mtext %d, type %ld.\n", size, length, value2, type);
 		printf("Valeurs recues : retour %ld, length %ld, mtext %d, type %ld.\n", s, m1->length, ((int*)m1->mtext)[2], m1->type);
-		printf("\n");
+		printf("\n\n");
 		return -1;
 	}
 	return 0;
@@ -131,11 +69,11 @@ int index_check(MESSAGE* file, char text[], int first_free, int last_free, int f
 	if(head->first_free != first_free || head->last_free != last_free
 			|| head->first_occupied != first_occupied || head->last_occupied != last_occupied){
 
-		printf("%s\n\n", text);
+		printf("%s\n", text);
 		printf("Indices cibles : %d, %d, %d, %d\n", first_free, last_free, first_occupied, last_occupied);
 		printf("Indices reels : %d, %d, %d, %d\n",
 				head->first_free, head->last_free, head->first_occupied, head->last_occupied);
-		printf("\n");
+		printf("\n\n");
 		return -1;
 	}
 	return 0;
@@ -144,10 +82,10 @@ int index_check(MESSAGE* file, char text[], int first_free, int last_free, int f
 // Verifie la valeur de l'offset d'une case de la file
 int offset_check(MESSAGE* file, char text[], int offset, int position){
 	if( ((mon_message *)&file->shared_memory->messages[position])->offset != offset ){
-		printf("%s\n\n", text);
+		printf("%s\n", text);
 		printf("offset voulu : %d\n", offset);
 		printf("offset reel : %ld\n", ((mon_message *)&file->shared_memory->messages[position])->offset);
-		printf("\n");
+		printf("\n\n");
 		return -1;
 	}
 	return 0;
@@ -156,10 +94,10 @@ int offset_check(MESSAGE* file, char text[], int offset, int position){
 // Verifie les valeurs de retour suite a une erreur
 int error_check(char text[], ssize_t s, int error){
 	if(s != -1 || errno != error){
-		printf("%s\n\n", text);
+		printf("%s\n", text);
 		printf("Valeurs attendues : retour %d, error %d.\n", -1, error);
 		printf("Valeurs recues : retour %ld, error %d.\n", s, errno);
-		printf("\n");
+		printf("\n\n");
 		return -1;
 	}
 	return 0;
@@ -435,7 +373,7 @@ int test_envoi(MESSAGE* file){
 	if(m_nb(file) != 0) { printf("test_envoi() : ECHEC : m_nb != 0 avant envoi.\n"); return -1;}
 
 	// Test : envoi en mode bloquant AVEC de la place
-	if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_envoi() : ECHEC : envoie 1er message.\n"); return -1; }
+	if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_envoi() : ECHEC : envoi 1er message.\n"); return -1; }
 
 	// Verifie les valeurs des index
 	if(index_check(file, "test_envoi() : ECHEC : indice.", -1, -1, 0, 0) == -1) { return -1; };
@@ -516,6 +454,7 @@ int test_reception_erreurs(){
 	struct mon_message *m1 = malloc( sizeof( struct mon_message ) + sizeof(t));
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
+
 	// Test reception avec drapeau incorrect
 	char name[] = "/reception_erreurs_1";
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
@@ -525,8 +464,19 @@ int test_reception_erreurs(){
 	if(error_check("test_reception_erreurs() : ECHEC : gestion reception avec drapeau incorrect.", s, EIO) == -1)
 		{return -1;}
 
-	// Test file Write Only
-	// En fait, m_connexion avec O_WRONLY est automatiquement passe en O_RDWR car sinon cela entraine des segmentation
+
+	// Test reception dans un buffer trop petit (il faut d'abord envoyer un message dans la file)struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
+	m1->type = (long) getpid();
+	memmove( m1->mtext, t, sizeof(t));
+	if( m_envoi( file, m1, sizeof(t), 0) != 0 ){ printf("test_reception_erreurs() : ECHEC : envoi.\n"); return -1; }
+
+	s = m_reception(file, m1, 0, 0, O_NONBLOCK); // 0 au lieu de sizeof(t)
+	if(error_check("test_reception_erreurs() : ECHEC : gestion buffer trop petit.", s, EMSGSIZE) == -1)
+		{return -1;}
+
+
+	// Teste reception sur une file Write Only
+	// En fait, O_WRONLY est automatiquement passe par m_connexion en O_RDWR car sinon cela entraine des segmentation
 	// fault sur certains systemes. Ce test ne fonctionne donc pas en general (pas possible de se connecter en write only).
 	/*
 	MESSAGE* file1 = m_connexion("/reception_erreurs_1", O_WRONLY);
@@ -813,4 +763,67 @@ int test_compact_messages(){
 	printf("test_compact_messages() : OK\n\n");
 	return 0;
 }
+
+
+// PARALLELISME
+// Test l'envoi et la reception par des processus en parallele
+// 4 processus en parallele : 2 envoient le nombre maximum de message et 2 en receptionne le nombre maximum (en mode bloquant)
+int test_processus_paralleles(){
+	int nbr_msg = 500;
+	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
+
+	// message a envoyer
+	struct mon_message *me = malloc(size_msg);
+	if( me == NULL ){ perror("Function test malloc()"); exit(-1); }
+	memmove( me->mtext, t, sizeof( t ));
+
+	// structure pour recevoir un message
+	struct mon_message *mr = malloc(size_msg);
+	char name[] = "/processus_paralleles";
+
+	// Creation de la file
+	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, nbr_msg, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	// debug : mettre une file anonyme
+
+	// Le pere cree un fils A
+	pid_t pidA = fork();
+	if(pidA == -1){ perror("test_processus_paralleles fork() A"); exit(-1); }
+
+	// Le pere et A creent tous les 2 un fils B
+	pid_t pidB = fork();
+	if(pidB == -1){ perror("test_processus_paralleles fork() B"); exit(-1); }
+
+	// Les 2 fils B : chacun RECEPTIONNE (en mode bloquant) le nombre maximal de messages que peut contenir la file
+	if(pidB == 0){
+		for(int j = 0; j < nbr_msg; j++){
+			if( m_reception(file, mr, sizeof(t), 0, 0) == 0 ){
+				printf("test_processus_paralleles() : ECHEC : receptions messages n %d.\n", j + 1); _exit(-1);
+			}
+		}
+		_exit(0);
+	}
+	// Pere et fils A : chacun ENVOIE (en mode bloquant) le nombre maximal de messages que peut contenir la file
+	else if(pidB > 0){
+		for(int j = 0; j < nbr_msg; j++){
+			if( m_envoi( file, me, sizeof(t), 0) != 0 ){
+				printf("test_processus_paralleles() : ECHEC : envois messages n %d.\n", j + 1);
+				if(pidA == 0){ _exit(-1); }
+				return -1;
+			}
+		}
+		// Le fils A
+		if(pidA == 0){ _exit(0); }
+	}
+	// Le pere attend que les enfants aient termine et verifie leur valeur de retour
+	int status;
+	while(wait(&status) > 0)
+		if(status == -1) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
+	if(status == -1) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
+	if(errno != ECHILD) { printf("test_processus_paralleles() : ECHEC : wait ECHILD\n"); return(-1);}
+
+	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
+	printf("test_processus_paralleles() : OK\n");
+	return 0;
+}
+
 
