@@ -16,11 +16,7 @@ int t[4] = {-12, 99, 134, 543};
 // Test l'envoi et la reception par des processus en parallele
 // 4 processus en parallele : 2 envoient le nombre maximum de message et 2 en receptionne le nombre maximum (mode bloquant)
 int test_processus_paralleles(){
-	// 2 proc creent / se connectent a une file
-	// ils envoient 1000 messages
-	// 2 proc en reçoivent 500 pendant que les 2 premiers continuent à en envoyer 500 en mode bloquant
-	// il y a seulement 1000 places pour les messages
-	int nbr_msg = 1000;
+	int nbr_msg = 20;
 	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
 
 	// message a envoyer
@@ -31,7 +27,8 @@ int test_processus_paralleles(){
 	// structure pour recevoir un message
 	struct mon_message *mr = malloc(size_msg);
 
-	MESSAGE* file = m_connexion(NULL, O_RDWR | O_CREAT, nbr_msg, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	MESSAGE* file = m_connexion("/sophie_germain", O_RDWR | O_CREAT, nbr_msg, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	// debug : mettre une file anonyme
 
 	// Le pere cree un fils A
 	pid_t pidA = fork();
@@ -44,24 +41,33 @@ int test_processus_paralleles(){
 	// Les 2 fils B : chacun receptionne (en mode bloquant) le nombre maximal de messages que peut contenir la file
 	if(pidB == 0){
 		for(int j = 0; j < nbr_msg; j++){
+			printf("avant m_reception n %d\n", j+1); // debug
 			if( m_reception(file, mr, sizeof(t), 0, 0) <= 0 ){
 				printf("test_processus_paralleles() : ECHEC : receptions messages n %d.\n", j + 1); return -1;
 			}
 		}
+		printf("\n\n fils B termine. PidA = %d\n\n", pidA); // debug
 		_exit(0);
 	}
 	// Pere et fils A : chacun envoie (en mode bloquant) le nombre maximal de messages que peut contenir la file
 	else if(pidB > 0){
 		for(int j = 0; j < nbr_msg; j++){
+			printf("avant m_envoi n %d\n", j+1); // debug
 			if( m_envoi( file, me, sizeof(t), 0) != 0 ){
 				printf("test_processus_paralleles() : ECHEC : envois messages n %d.\n", j + 1); return -1;
 			}
 		}
 		// Le fils A
 		if(pidA == 0){
+			printf("\n\n fils A termine.\n\n"); // debug
+			while(wait(NULL) > 0 && errno != ECHILD)
+				;
 			_exit(0);
 		}
 	}
+	printf("\n\n PERE termine.\n\n"); // debug
+	while(wait(NULL) > 0 && errno != ECHILD)
+					;
 	// DEBUG : verifier les valeurs des messages et des types lors de la reception
 	printf("test_processus_paralleles() : OK\n");
 	return 0;
@@ -80,17 +86,18 @@ int main(int argc, const char * argv[]) {
 	test_envoi(file);
 	test_reception(file);
 
-	int msg_nb = 20; // msg_nb doit etre compris entre 7 (pour les tests) et 24 (segmentation fault car 'type' devient trop grand)
+	int msg_nb = 20; // msg_nb doit etre superieur a 7 pour les tests
 	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
-	//test_processus_paralleles();
+	// test_processus_paralleles();
 	test_compact_messages();
 
 	return EXIT_SUCCESS;
 }
 
 
+// FONCTIONS DE VERIFICATION
 // Verifie les valeurs du message recu (type, length, etc.)
 int reception_check(mon_message *m1, char text[], ssize_t s, ssize_t size, size_t length, int value2, long type){
 	if(s != size || m1->length != length || ((int*)m1->mtext)[2] != value2 || m1->type != type){
@@ -144,16 +151,31 @@ int error_check(char text[], ssize_t s, int error){
 	return 0;
 }
 
+// CONNEXION
+// Teste les differents cas d'utilisation de m_connexion
+int test_connexion(){
+	char name1[] = "/nonono";
+	if(test_connexion_simple(name1) == -1) { return -1; } //test connexion simple en O_RDWR | O_CREAT
+	if(test_connexion_read_only() == -1) { return -1; } //test connexion simple en O_RDONLY | O_CREAT
+	if(test_connexion_existe(name1) == -1) { return -1; } // test connexion sur une file existante
 
-// Teste la fonction m_connexion
+	// debug
+	// if(test_connexion_anonyme() == -1) { return -1; } //tester la connexion a une file anonyme par un processus enfant
+
+	// debug
+	//if(test_connexion_excl() == -1) { return -1; } // tester la connexion en O_CREAT | O_EXCL
+
+	printf("test_connexion() : OK\n\n");
+	return 0;
+}
+
+// Teste la connexion simple en O_RDWR | O_CREAT
 int test_connexion_simple(char name[]){
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
-	if(file == NULL){
-		printf("test_connexion_simple() : ECHEC : NULL\n");
-		return -1;
-	}
+	if(file == NULL){ printf("test_connexion_simple() : ECHEC : NULL\n"); return -1; }
+
 	struct header *head = &file->shared_memory->head;
 
 	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
@@ -183,6 +205,7 @@ int test_connexion_simple(char name[]){
 	return 0;
 }
 
+// Teste la connexion simple en O_RDONLY | O_CREAT (doit echouer)
 int test_connexion_read_only(){
 	char name[] = "/aaaaaaaaaaaaaaaa";
 	int msg_nb = 12;
@@ -212,11 +235,11 @@ int test_connexion_existe(char name[]){
 	return 0;
 }
 
+// Teste la connexion a une file anonyme par un processus enfant
 int test_connexion_anonyme(){
-	char name[] = "/kangourou";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
-	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
+	MESSAGE* file = m_connexion(NULL, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file == NULL){
 		printf("test_connexion_anonyme() : ECHEC : NULL\n");
 		return -1;
@@ -251,6 +274,7 @@ int test_connexion_anonyme(){
 	return 0;
 }
 
+//  Teste la connexion en O_CREAT | O_EXCL
 int test_connexion_excl(){
 	char name[] = "/cecinestpasunnom";
 	int msg_nb = 12;
@@ -272,19 +296,7 @@ int test_connexion_excl(){
 }
 
 
-int test_connexion(){
-	char name1[] = "/nonono";
-	if(test_connexion_simple(name1) == -1) { return -1; } //test connexion simple en O_RDWR | O_CREAT
-	if(test_connexion_read_only() == -1) { return -1; } //test connexion simple en O_RDONLY | O_CREAT
-	if(test_connexion_existe(name1) == -1) { return -1; } // test connexion sur une file existante
-	if(test_connexion_anonyme() == -1) { return -1; } //tester la connexion a une file anonyme par un processus enfant
-
-	//if(test_connexion_excl() == -1) { return -1; } // tester la connexion en O_CREAT | O_EXCL
-
-	printf("test_connexion() : OK\n\n");
-	return 0;
-}
-
+// DECONNEXION
 int test_deconnexion(){
 	char name[] = "/NONO";
 	int msg_nb = 12;
@@ -362,6 +374,7 @@ int test_destruction(){
 }
 
 
+// ENVOI
 // Teste la bonne gestion des erreurs dans m_envoi
 int test_envoi_erreurs(){
 	struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
@@ -471,6 +484,7 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 }
 
 
+// RECEPTION
 // Teste la bonne gestion des erreurs dans m_reception
 int test_reception_erreurs(){
 	struct mon_message *m1 = malloc( sizeof( struct mon_message ) + sizeof(t));
@@ -571,7 +585,7 @@ int test_receptions_multiples(MESSAGE* file, int msg_nb){
 	//fin debug
 
 	// Teste la reception de multiples messages en mode non bloquant avec differentes valeurs de 'type'
-	if(test_reception_multiples_milieu(file, m1, size_msg, msg_nb, position1, position2, position3) == -1)
+	if(test_receptions_multiples_milieu(file, m1, size_msg, msg_nb, position1, position2, position3) == -1)
 		{return -1;}
 
 	// Verifie les index et offsets apres receptions multiples
@@ -636,7 +650,7 @@ int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int
 }
 
 // Teste la reception de multiples messages en mode non bloquant avec differentes valeurs de 'type'
-int test_reception_multiples_milieu(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb,
+int test_receptions_multiples_milieu(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb,
 		int position1, int position2, int position3){
 
 	for(int j = 2; j < msg_nb; j++){
@@ -704,6 +718,7 @@ int test_receptions_multiples_fin(MESSAGE* file, int msg_nb, size_t size_msg,
 }
 
 
+// MESSAGES COMPACTES
 // Teste que les messages sont compactes en envoyant des messages plus petits que la taille maximum autorisee
 int test_compact_messages(){
 	int u[1] = {45};
