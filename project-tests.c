@@ -7,15 +7,21 @@ int t[4] = {-12, 99, 134, 543};
 // Faire la fonction tout_a_gauche_defragmentation
 // tester le signal
 
-// Ajouter test envois multiples apres receptions multiples
-
 // Envoie puis recoit des messages petits pour verifier qu'on peut envoyer plus que nb_msg (memoire compacte)
 // puis envoie des messages plus gros : verifier que la fonction fct_met_tout_a_gauche fonctionne
+
+int test_signal(){
+	char name1[] = "/test_signal";
+	MESSAGE* file = m_connexion(name1, O_RDWR | O_CREAT | O_EXCL, 10, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+
+
+	return 0;
+}
 
 int main(int argc, const char * argv[]) {
 	printf("\n");
 
-	// Teste connexion / deconnexion
+	// Teste connexion et deconnexion
 	test_connexion();
 	test_deconnexion();
 	test_destruction();
@@ -134,6 +140,42 @@ int memory_check(MESSAGE* file, int msg_nb, size_t max_length){
 
 	// Verifie l'initialisation des index du tableau de message
 	if(index_check(file, "test_connexion_simple() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+
+	return 0;
+}
+
+int envois_repetes(MESSAGE* file, int msg_nb, size_t msg_size, mon_message *m, int flag){
+	size_t free_memory = file->memory_size - sizeof(header);
+
+	for(int j = 0; j < msg_nb; j++){
+		// Envoie des messages avec differentes valeurs de type
+		m->type = abs((long) 1000 + pow(-2.0,(double) j));
+		if( m_envoi( file, m, msg_size - sizeof(mon_message), flag) != 0 ){
+			printf("ECHEC : envoie message n %d.", j + 1); return -1;
+		}
+		// Verifie le nombre de messages dans la file
+		if(m_nb(file) != j + 1) { printf("ECHEC : nombre de messages dans la file."); return -1;}
+
+		// Verifie les valeurs des index tant que le tableau n'est pas plein
+		if(msg_size * (j+2) <= free_memory){
+			char text[] = "ECHEC : indice envois repetes.";
+			if(index_check(file, text, msg_size * (j+1), msg_size * (j+1), 0, msg_size * (j)) == -1) { return -1; };
+		}
+		// Verifie les valeurs des index quand le tableau est plein
+		else{
+			char text[] = "ECHEC : indice apres envoi dernier message.";
+			if(index_check(file, text, -1, -1, 0, msg_size * (j)) == -1) { return -1; };
+		}
+	}
+	// Verifie les offsets dans la file
+	for(int j = 0; j < msg_nb; j++){
+		if(j != msg_nb-1 && offset_check(file, " : ECHEC : offset.", msg_size, j*msg_size) == -1)
+			{ return -1; }
+
+		else if(j == msg_nb-1
+				&& offset_check(file, "ECHEC : offset dernier message.", 0, j*msg_size) == -1)
+			{ return -1; }
+	}
 
 	return 0;
 }
@@ -347,33 +389,25 @@ int test_envoi_erreurs(){
 	m->type = (long) getpid();
 	memmove( m->mtext, t, sizeof( t ));
 
-
-	// Test envoi d'un message trop long
+	// TESTE envoi d'un message trop long
 	char name2[] = "/envoi_erreurs_2";
 	size_t small_size = sizeof(t) - sizeof(char);
 	MESSAGE* file2 = m_connexion(name2, O_RDWR | O_CREAT, 5, small_size, S_IRWXU | S_IRWXG | S_IRWXO);
-
 	int i = m_envoi( file2, m, sizeof(t), O_NONBLOCK);
 	if(error_check("test_envoi_erreurs() : ECHEC : gestion envoi d'un message trop long.", i, EMSGSIZE) == -1) {return -1;}
-
 	if(m_destruction(name2) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 2\n"); return(-1); }
 
-
-	// Test envoi avec mauvais drapeau
+	// TESTE envoi avec mauvais drapeau
 	char name3[] = "/envoi_erreurs_3";
 	MESSAGE* file3 = m_connexion(name3, O_RDWR | O_CREAT, 5, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
-
 	i = m_envoi( file3, m, sizeof(t), O_RDWR);
 	if(error_check("test_envoi_erreurs() : ECHEC : gestion envoi avec mauvais drapeau.", i, EIO) == -1) {return -1;}
 
-
-	// Test envoi dans une file en lecture seule
+	// TESTE envoi dans une file en lecture seule
 	MESSAGE* file1 = m_connexion(name3, O_RDONLY);
-
 	i = m_envoi( file1, m, sizeof(t), O_NONBLOCK);
 	char text[] = "test_envoi_erreurs() : ECHEC : gestion envoi dans un tableau read only.";
 	if(error_check(text, i, EPERM) == -1) {return -1;}
-
 	if(m_destruction(name3) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 3\n"); return(-1); }
 
 	printf("test_envoi_erreurs() : OK\n\n");
@@ -383,26 +417,16 @@ int test_envoi_erreurs(){
 
 // Teste m_envoi en envoyant un message quand la file est vide et un quand elle est pleine (mode non bloquant)
 int test_envoi(MESSAGE* file){
-	struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
+	size_t msg_size = sizeof( struct mon_message ) + sizeof( t ) ;
+	struct mon_message *m = malloc(msg_size);
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
 
 	m->type = (long) getpid();
 	memmove( m->mtext, t, sizeof( t ));
 
-	// Verifie qu'il n'y a aucun message dans la file
-	if(m_nb(file) != 0) { printf("test_envoi() : ECHEC : m_nb != 0 avant envoi.\n"); return -1;}
-
-	// Test : envoi en mode bloquant AVEC de la place
-	if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_envoi() : ECHEC : envoi 1er message.\n"); return -1; }
-
-	// Verifie les valeurs des index
-	if(index_check(file, "test_envoi() : ECHEC : indice.", -1, -1, 0, 0) == -1) { return -1; };
-
-	// Verifie la valeur de l'offset
-	if(offset_check(file, "test_envoi() : ECHEC : offset message.", 0, 0) == -1) { return -1; };
-
-	// Verifie qu'il y a bien un message dans la file
-	if(m_nb(file) != 1) { printf("test_envoi() : ECHEC : m_nb != 1 apres envoi.\n"); return -1;}
+	// Test : envoi en mode non bloquant AVEC de la place
+	if(envois_repetes(file, 1, msg_size, m, O_NONBLOCK) == -1)
+		{ printf(" test_envoi()\n\n"); return -1; }
 
 	// Test : envoi en mode non bloquant SANS place
 	int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
@@ -414,46 +438,17 @@ int test_envoi(MESSAGE* file){
 }
 
 
-// Test m_envoi en envoyant de multiples messages (file pleine et non pleine)
+// Teste m_envoi en envoyant de multiples messages (file pleine et non pleine)
 int test_envois_multiples(MESSAGE* file, int msg_nb){
-	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
-	struct mon_message *m = malloc(size_msg);
+	size_t msg_size = sizeof( struct mon_message ) + sizeof( t );
+	struct mon_message *m = malloc(msg_size);
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
 
 	memmove( m->mtext, t, sizeof( t ));
 
 	// Test : envois en mode non bloquant AVEC de la place
-	for(int j = 0; j < msg_nb; j++){
-		m->type = abs((long) 1000 + pow(-2.0,(double) j));
-		if( m_envoi( file, m, sizeof(t), O_NONBLOCK) != 0 ){
-			printf("test_envois_multiples() : ECHEC : envoie message n %d.\n", j + 1); return -1;
-		}
-
-		// Verifie le nombre de messages dans la file
-		if(m_nb(file) != j + 1) { printf("test_envois_multiples() : ECHEC : nombre de messages dans la file.\n"); return -1;}
-
-		size_t free_memory = file->memory_size - sizeof(header);
-
-		// Verifie les valeurs des index tant que le tableau n'est pas plein
-		if(size_msg * (j+2) <= free_memory){
-			char text[] = "test_envois_multiples() : ECHEC : indice envois multiples.";
-			if(index_check(file, text, size_msg * (j+1), size_msg * (j+1), 0, size_msg * (j)) == -1) { return -1; };
-		}
-		// Verifie les valeurs des index quand le tableau est plein
-		else{
-			char text[] = "test_envois_multiples() : ECHEC : indice apres envoi dernier message.";
-			if(index_check(file, text, -1, -1, 0, size_msg * (j)) == -1) { return -1; };
-		}
-	}
-	// Verifie les offsets dans la file
-	for(int j = 0; j < msg_nb; j++){
-		if(j != msg_nb-1 && offset_check(file, "test_envois_multiples() : ECHEC : offset.", size_msg, j*size_msg) == -1)
-			{ return -1; }
-
-		else if(j == msg_nb-1
-				&& offset_check(file, "test_envois_multiples() : ECHEC : offset dernier message.", 0, j*size_msg) == -1)
-			{ return -1; }
-	}
+	if(envois_repetes(file, msg_nb, msg_size, m, O_NONBLOCK) == -1)
+		{ printf(" test_envois_multiples()\n\n"); return -1; }
 
 	// Test : envoi en mode non bloquant SANS place
 	for(int j = 0; j < 2; j++){
@@ -485,7 +480,7 @@ int test_reception_erreurs(){
 		{return -1;}
 
 
-	// Test reception dans un buffer trop petit (il faut d'abord envoyer un message dans la file)struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
+	// Test reception dans un buffer trop petit (il faut d'abord envoyer un message dans la file)
 	m1->type = (long) getpid();
 	memmove( m1->mtext, t, sizeof(t));
 	if( m_envoi( file, m1, sizeof(t), 0) != 0 ){ printf("test_reception_erreurs() : ECHEC : envoi.\n"); return -1; }
@@ -494,20 +489,6 @@ int test_reception_erreurs(){
 	if(error_check("test_reception_erreurs() : ECHEC : gestion buffer trop petit.", s, EMSGSIZE) == -1)
 		{return -1;}
 
-
-	// Teste reception sur une file Write Only
-	// En fait, O_WRONLY est automatiquement passe par m_connexion en O_RDWR car sinon cela entraine des segmentation
-	// fault sur certains systemes. Ce test ne fonctionne donc pas en general (pas possible de se connecter en write only).
-	/*
-	MESSAGE* file1 = m_connexion("/reception_erreurs_1", O_WRONLY);
-	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
-
-	s = m_reception(file1, m1, sizeof(t), 0, O_NONBLOCK);
-	if(error_check("test_reception_erreurs() : ECHEC : gestion lecture quand Write Only.", s, EPERM) == -1)
-		{return -1;}
-	*/
-
-	// Test reception si la longueur de la memoire a l'adresse msg est plus petite que le message a lire : debug
 
 	if(m_destruction(name) == -1) { printf("test_reception_erreurs() : ECHEC : destruction\n"); return(-1); }
 
@@ -524,7 +505,7 @@ int test_reception(MESSAGE* file){
 	// Reception quand il y a bien un message dans la file
 	ssize_t s = m_reception(file, m1, sizeof(t), 0, 0);
 
-	if(reception_check(m1, "test_reception() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], getpid()) == -1)
+	if(reception_check(m1, "test_reception() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 1001) == -1)
 		{return -1;}
 
 	// Verifie les valeurs des index
@@ -562,26 +543,6 @@ int test_receptions_multiples(MESSAGE* file, int msg_nb){
 
 	// Teste reception avec un type strictement negatif
 	if(test_reception_type_neg(file, m1, size_msg, msg_nb, position1, position2) == -1) {return -1;}
-
-	//debug
-	/*
-	printf("CASES OCCUPEES\n");
-	if(file->shared_memory->head.first_occupied ==! -1){
-		int current = file->shared_memory->head.first_occupied;
-		int offset = ((mon_message*)(&file->shared_memory->messages[current]))->offset;
-		int i = 0;
-		while(offset != 0){
-			int type = ((mon_message*)(&file->shared_memory->messages[current]))->type;
-			printf("message n %d, position = %d, type = %d, offset = %d\n", i, current, type, offset);
-			current = current + offset;
-			offset = ((mon_message*)(&file->shared_memory->messages[current]))->offset;
-			i++;
-		}
-	}
-	else{ printf("pas de cases occupees :\n"); }
-	printf("fin cases occupees \n\n");
-	*/
-	//fin debug
 
 	// Teste la reception de multiples messages en mode non bloquant avec differentes valeurs de 'type'
 	if(test_receptions_multiples_milieu(file, m1, size_msg, msg_nb, position1, position2, position3) == -1)
@@ -735,47 +696,19 @@ int test_compact_messages(){
 
 	// Nombre de petits messages pouvant etre stockes dans la file
 	int small_msg_nb = (int) floor(big_msg_size * big_msg_nb / small_msg_size);
-	size_t free_memory = file->memory_size - sizeof(header);
 
-	// Test envoi du nombre maximal de petits messages
-	for(int j = 0; j < small_msg_nb; j++){
-		if( m_envoi( file, m, sizeof(u), 0) != 0 ){
-			printf("test_compact_messages() : ECHEC : envoie de %d petits messages.\n", small_msg_nb); return -1;
-		}
+	// Test envoi du nombre maximal de petits messages (doit reussir)
+	if(envois_repetes(file, small_msg_nb, small_msg_size, m, O_NONBLOCK) == -1)
+		{ printf(" test_compact_messages()\n\n"); return -1; }
 
-		// Verifie les valeurs des index tant que le tableau n'est pas plein
-		if(small_msg_size * (j+2) <= free_memory){
-			char text[] = "test_compact_messages() : ECHEC : indice envois multiples.";
-			if(index_check(file, text, small_msg_size * (j+1), small_msg_size * (j+1), 0, small_msg_size * (j)) == -1)
-				{ return -1; };
-		}
 
-		// Verifie les valeurs des index quand le tableau est plein
-		else{
-			char text[] = "test_compact_messages() : ECHEC : indice apres envoi dernier message.";
-			if(index_check(file, text, -1, -1, 0, small_msg_size * j) == -1) { return -1; };
-		}
-	}
-
-	// Verifie les offsets dans la file
-	for(int j = 0; j < small_msg_nb; j++){
-		if(j != small_msg_nb-1
-				&& offset_check(file, "test_compact_messages() : ECHEC : offset.", small_msg_size, j*small_msg_size) == -1)
-			{ return -1; }
-
-		else if(j == small_msg_nb-1
-				&& offset_check(file, "test_compact_messages() : ECHEC : offset dernier message.", 0, j*small_msg_size) == -1)
-			{ return -1; }
-	}
-
-	// Test : envoi en mode non bloquant SANS place
+	// Test : envoi en mode non bloquant SANS place (doit echouer)
 	for(int j = 0; j < 2; j++){
 		int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
 		char text[] = "test_compact_messages() : ECHEC : gestion envoi dans un tableau plein (mode non bloquant).";
 
 		if(error_check(text, i, EAGAIN) == -1) {return -1;}
 	}
-	// DEBUG : peut probablement factoriser toute les envois avec test_envois_multiples
 
 	// Destruction de la file
 	if(m_destruction(name) == -1) { printf("test_compact_messages() : ECHEC : destruction\n"); return(-1); }

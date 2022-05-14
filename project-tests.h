@@ -14,6 +14,9 @@ int value_check(MESSAGE* file, char text[], long target_value, long actual_value
 int offset_check(MESSAGE* file, char text[], int offset, int position);
 int error_check(char text[], ssize_t s, int error);
 
+// Fonctions auxiliaires
+int envois_repetes(MESSAGE* file, int msg_nb, size_t msg_size, mon_message *m, int flag);
+
 // Connexion
 int test_connexion();
 int test_connexion_simple(char name[]);
