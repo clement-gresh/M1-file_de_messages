@@ -7,8 +7,10 @@
 
 // FONCTIONS DE TEST
 // Verifications
+int memory_check(MESSAGE* file, int msg_nb, size_t max_length);
 int reception_check(mon_message *m1, char text[], ssize_t s, ssize_t size, size_t length, int value2, long type);
 int index_check(MESSAGE* file, char text[], int first_free, int last_free, int first_occupied, int last_occupied);
+int value_check(MESSAGE* file, char text[], long target_value, long actual_value);
 int offset_check(MESSAGE* file, char text[], int offset, int position);
 int error_check(char text[], ssize_t s, int error);
 

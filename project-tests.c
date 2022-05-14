@@ -80,6 +80,18 @@ int index_check(MESSAGE* file, char text[], int first_free, int last_free, int f
 	return 0;
 }
 
+// Verifie que les 2 valeurs sont egales et renvoie une erreur sinon
+int value_check(MESSAGE* file, char text[], long target_value, long actual_value){
+	if( actual_value != target_value ){
+		printf("%s\n", text);
+		printf("Valeur voulue : %ld\n", target_value);
+		printf("Valeur reelle : %ld\n", actual_value);
+		printf("\n\n");
+		return -1;
+	}
+	return 0;
+}
+
 // Verifie la valeur de l'offset d'une case de la file
 int offset_check(MESSAGE* file, char text[], int offset, int position){
 	if( ((mon_message *)&file->shared_memory->messages[position])->offset != offset ){
@@ -104,6 +116,29 @@ int error_check(char text[], ssize_t s, int error){
 	return 0;
 }
 
+// Verifie les differents attributs de la memoire partagee (taille memoire, longueur max d'un message,...)
+int memory_check(MESSAGE* file, int msg_nb, size_t max_length){
+	// Verifie le nombre minimum de messages que peut contenir la file
+	if(value_check(file, "test_connexion_simple() : ECHEC pipe_capacity", msg_nb, m_capacite(file)) == -1)
+		{ return -1; }
+
+	// Verifie la taille maximum d'un message
+	if(value_check(file, "test_connexion_simple() : ECHEC max_length", max_length,  m_message_len(file)) == -1)
+		{ return -1; }
+
+	// Verifie la memoire allouee
+	size_t memory_size = sizeof(header) + (sizeof(mon_message) + max_length) * msg_nb;
+
+	if(value_check(file, "test_connexion_simple() : ECHEC allocation memoire", memory_size,  file->memory_size) == -1)
+		{ return -1; }
+
+	// Verifie l'initialisation des index du tableau de message
+	if(index_check(file, "test_connexion_simple() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
+
+	return 0;
+}
+
+
 // CONNEXION
 // Teste les differents cas d'utilisation de m_connexion
 int test_connexion(){
@@ -122,41 +157,22 @@ int test_connexion(){
 	return 0;
 }
 
-// Teste la connexion simple en O_RDWR | O_CREAT
+// Teste la creation d'une file en O_RDWR | O_CREAT
 int test_connexion_simple(char name[]){
 	int msg_nb = 12;
-	size_t max_message_length = sizeof(char)*20;
-	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
+	size_t max_length = sizeof(char)*20;
+
+	// Teste creation de la file
+	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file == NULL){ printf("test_connexion_simple() : ECHEC : NULL\n"); return -1; }
 
-	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
-	if(m_capacite(file) != msg_nb){
-		printf("Target pipe capacity : %ld != %d.\n",m_capacite(file), msg_nb);
-		printf("test_connexion_simple() : ECHEC : erreur pipe_capacity\n");
-		return -1;
-	}
-	if(m_message_len(file) != max_message_length){
-		printf("Actual max message length : %ld != %ld.\n", m_message_len(file), max_message_length);
-		printf("test_connexion_simple() : ECHEC : erreur max_length_message\n");
-		return -1;
-	}
-	// Verifie la memoire allouee
-	size_t memory_size = sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb;
+	// Verification des attributs de la file
+	if( memory_check(file, msg_nb, max_length) == -1) { return -1; }
 
-	if(file->memory_size != memory_size){
-		printf("test_connexion_simple() : ECHEC : erreur allocation memoire\n");
-		printf("Target memory size : %ld\n",memory_size);
-		printf("Actual memory size : %ld\n", file->memory_size);
-		printf("\n");
-		return -1;
-	}
-
-	// Verifie l'initialisation des index du tableau de message
-	if(index_check(file, "test_connexion_simple() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
 	return 0;
 }
 
-// Teste la connexion simple en O_RDONLY | O_CREAT (doit echouer)
+// Teste la creation d'une file avec O_RDONLY | O_CREAT (doit echouer)
 int test_connexion_read_only(){
 	char name[] = "/aaaaaaaaaaaaaaaa";
 	int msg_nb = 12;
@@ -185,38 +201,39 @@ int test_connexion_existe(char name[]){
 	return 0;
 }
 
-// Teste la connexion a une file anonyme par un processus enfant
+// Teste la creation d'une file anonyme puis la connexion par un processus enfant
 int test_connexion_anonyme(){
 	int msg_nb = 12;
-	size_t max_message_length = sizeof(char)*20;
-	MESSAGE* file = m_connexion(NULL, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
+	size_t max_length = sizeof(char)*20;
+
+	// Teste la creation de la file
+	MESSAGE* file = m_connexion(NULL, O_RDWR | O_CREAT, msg_nb, max_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file == NULL){ printf("test_connexion_anonyme() : ECHEC : file NULL\n"); return -1; }
 
-	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
-	if(m_capacite(file) != msg_nb){
-		printf("Target pipe capacity : %ld != %d.\n", m_capacite(file), msg_nb);
-		printf("test_connexion_anonyme() : ECHEC : erreur pipe_capacity\n");
-		return -1;
-	}
-	if(m_message_len(file) != max_message_length){
-		printf("Actual max message length : %ld != %ld.\n", m_message_len(file), max_message_length);
-		printf("test_connexion_anonyme() : ECHEC : erreur max_length_message\n");
-		return -1;
-	}
-	// Verifie la memoire allouee
-	size_t memory_size = sizeof(header) + (sizeof(mon_message) + max_message_length) * msg_nb;
+	// Verification des attributs de la file
+	if( memory_check(file, msg_nb, max_length) == -1) { return -1; }
 
-	if(file->memory_size != memory_size){
-		printf("test_connexion_anonyme() : ECHEC : erreur allocation memoire\n");
-		printf("Target memory size : %ld\n", memory_size);
-		printf("Actual memory size : %ld\n", file->memory_size);
-		printf("\n");
-		return -1;
+	// Creation d'un fils
+	pid_t pid = fork();
+	if(pid == -1){ perror("test_connexion_anonyme fork() "); exit(-1); }
+
+	if(pid == 0){
+		// Teste envoi d'un message sur la file par l'enfant
+		struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
+		if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
+		m->type = (long) getpid();
+		memmove( m->mtext, t, sizeof( t ));
+
+		if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_connexion_anonyme() : ECHEC : envoie message.\n"); _exit(-1); }
+		_exit(0);
 	}
-
-	// Verifie l'initialisation des index du tableau de message
-	if(index_check(file, "test_connexion_anonyme() : ECHEC : erreur indices memoire.", 0, 0, -1, -1) == -1) { return -1; };
-
+	else{
+		// Le pere attend que l'enfant ait termine et verifie sa valeur de retour
+		int status;
+		wait(&status);
+		if(status == -1) { printf("test_connexion_anonyme() : ECHEC : status child\n"); return(-1); }
+		if(errno != ECHILD) { printf("test_connexion_anonyme() : ECHEC : wait ECHILD\n"); return(-1);}
+	}
 	return 0;
 }
 
@@ -288,17 +305,21 @@ int test_destruction(){
 		// Destruction de la file
 		if(m_destruction(name) != 0){ perror("test_destruction : ECHEC : m_destruction retour != 0\n"); return -1; }
 
-		// Tentative de connexion apres destruction
+		// Tentative de connexion apres destruction (doit echouer)
 		if(m_connexion(name, O_RDONLY) != NULL){
 			perror("test_destruction : ECHEC : connexion possible apres destruction\n");
-			return -1;
+			_exit(-1);
 		}
 		_exit(0);
 	}
-	else{ // pere
-		if(wait(NULL)==-1){ perror("wait"); return -1; }
+	else{
+		// Le pere attend que l'enfant ait termine et verifie sa valeur de retour
+		int status;
+		wait(&status);
+		if(status == -1) { printf("test_connexion_anonyme() : ECHEC : status child\n"); return(-1); }
+		if(errno != ECHILD) { printf("test_connexion_anonyme() : ECHEC : wait ECHILD\n"); return(-1);}
 
-		// Tentative de connexion apres destruction
+		// Tentative de connexion apres destruction (doit echouer)
 		if(m_connexion(name, O_WRONLY) != NULL){
 			perror("test_destruction : ECHEC : connexion possible apres destruction\n");
 			return -1;
@@ -822,6 +843,7 @@ int test_processus_paralleles(int msg_nb){
 	if(errno != ECHILD) { printf("test_processus_paralleles() : ECHEC : wait ECHILD\n"); return(-1);}
 
 	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
+
 	printf("test_processus_paralleles() : OK\n");
 	return 0;
 }
