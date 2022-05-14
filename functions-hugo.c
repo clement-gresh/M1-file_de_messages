@@ -66,9 +66,9 @@ int is_o_excl(int options){
 	return (options>>k)&1;
 }
 
-int private_or_shared(const char *nom){
+int anon_and_shared(const char *nom){
 	if(nom==NULL){
-		return MAP_SHARED | MAP_ANONYMOUS;
+		return MAP_SHARED | MAP_ANON;
 	}
 	return MAP_SHARED;
 }
@@ -89,7 +89,7 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 
 	int prot = build_prot(options);
 
-	int map_flag = private_or_shared(nom);
+	int map_flag = anon_and_shared(nom);
 	addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
 
 	if( (void*) addr == MAP_FAILED) {
@@ -137,14 +137,20 @@ int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
 	fstat(fd, &bufStat);
 
 	int prot = build_prot(options);
-
-	addr = mmap(NULL, bufStat.st_size, prot, MAP_SHARED, fd, 0);
+	int map_flag = anon_and_shared(nom);
+	addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
 	if( (void*) addr == MAP_FAILED) { perror("Function mmap()"); exit(EXIT_FAILURE); }
 
 	msg->memory_size = sizeof(header) + addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
 	msg->flag = options;
 	msg->shared_memory = addr;
 	return 0;
+}
+
+int file_exists (const char * f){
+    struct stat buff;
+    if (stat(f, &buff) != 0) return 0;
+    return S_ISREG(buff.st_mode);
 }
 
 MESSAGE *m_connexion(const char *nom, int options, ...){
@@ -164,7 +170,12 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     	size_t len_max = va_arg(parametersInfos, size_t);
     	mode_t mode = va_arg(parametersInfos, mode_t);
 		
-    	build_msg(msg, addr, nom, options, nb_msg, len_max, mode);
+    	if(file_exists(nom)){
+    		if(connex_msg(msg, addr, nom, options) == -1) { return NULL; }
+    	}else{
+	    	build_msg(msg, addr, nom, options, nb_msg, len_max, mode);
+    	}
+
 
 		va_end(parametersInfos);
     }
