@@ -106,7 +106,7 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 	msg->shared_memory->head.last_free = 0;
 
 	// La place disponible pour les messages
-	((mon_message *)&msg->shared_memory->messages[0])->length = nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
+	((mon_message *)&msg->shared_memory->messages[0])->length = msg->memory_size - sizeof(header);
 	((mon_message *)&msg->shared_memory->messages[0])->offset = 0;
 
 	// Initialisation du mutex et des conditions

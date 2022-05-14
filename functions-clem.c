@@ -73,7 +73,7 @@ int enough_space(MESSAGE *file, size_t len){
 
 	while(true){
 		// Retourne current si la case a la place pour le message
-		if(((mon_message *)&messages[current])->length >= sizeof(mon_message) + len){
+		if(((mon_message *)&messages[current])->length >= len){
 			return current;
 		}
 		// Sinon passe a la case libre suivante s'il y en a une
@@ -311,8 +311,8 @@ void m_envoi_libres(MESSAGE *file, int current, size_t len){
 	size_t msg_size = sizeof(mon_message) + len;
 
 	// Si current a assez de place libre pour stocker ce message plus un autre
-	if(free_space > sizeof(mon_message)){
-
+	if(free_space > 0){
+		//printf("enough free space. Length : %ld, free space : %d\n", ((mon_message *)&messages[current])->length, free_space); // debug
 		// "Creation" de next
 		int next = current + msg_size;
 		((mon_message *)&messages[next])->length = current_length - msg_size;
