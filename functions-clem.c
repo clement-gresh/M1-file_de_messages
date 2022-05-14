@@ -147,36 +147,6 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	// Lock du mutex
 	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
 
-
-	// MAJ de la liste types_searched
-	/*
-	bool type_found = false;
-
-		// Cherche si le type recherche apparait deja dans le tableau
-	for(int i = 0; i < TYPE_SEARCH_NB; i++){
-		if(head->types_searched[i].type == type){
-			head->types_searched[i].number++;
-			type_found = true;
-			break;
-		}
-	}
-		// Sinon cherche si une case a number a 0 et remplace son type
-	if(!type_found){
-		for(int i = 0; i < TYPE_SEARCH_NB; i++){
-			if(head->types_searched[i].number == 0){
-				head->types_searched[i].type = type;
-				head->types_searched[i].number = 1;
-				type_found = true;
-				break;
-			}
-		}
-	}
-		// Sinon indique a l'utilisateur qu'il n'y a pas de place dans le tableau et exit
-	if(!type_found){
-		return my_error("Plus de place dans types_searched[] pour le type recherche.\n", file, NO_DECR, 0, UNLOCK, 'w', -1);
-	}
-	*/
-
 	// Recherche d'un message a lire et attente s'il n'y en a pas (sauf si O_NONBLOCK)
 	int current = m_reception_recherche(file, type, flags);
 	if(current == -1) { return -1; }
@@ -189,15 +159,6 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 
 	// Maj de la liste chainee des cases occupees
 	m_reception_occupees(file, current);
-
-
-	// MAJ de la liste types_searched (decremente le nombre correspondant au type recherche)
-	for(int i = 0; i < TYPE_SEARCH_NB; i++){
-		if(head->types_searched[i].type == type){
-			head->types_searched[i].number--;
-			break;
-		}
-	}
 
 	// Unlock le mutex
 	//if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
@@ -467,6 +428,8 @@ int m_reception_recherche(MESSAGE *file, long type, int flags){
 
 	int current;
 	bool msg_to_read = false;
+	bool wait = false;
+	int position;
 
 	while(!msg_to_read){
 		current = head->first_occupied;
@@ -496,9 +459,46 @@ int m_reception_recherche(MESSAGE *file, long type, int flags){
 		}
 		// Attente si pas de message et mode bloquant (et signal la condition d'envoi)
 		else if(!msg_to_read){
+
+			// Si c'est la premiere fois que le processus fait wait, il doit d'abord indiquer le type qu'il recherche
+			// dans la liste types_searched
+			if(wait == false){
+				bool type_found = false;
+
+				// Cherche si le 'type' recherche apparait deja dans le tableau
+				for(position = 0; position < TYPE_SEARCH_NB; position++){
+					if(head->types_searched[position].type == type){
+						head->types_searched[position].number++;
+						type_found = true;
+						break;
+					}
+				}
+				// Sinon cherche si une case a 'number' a 0 et remplace son 'type'
+				if(!type_found){
+					for(position = 0; position < TYPE_SEARCH_NB; position++){
+						if(head->types_searched[position].number == 0){
+							head->types_searched[position].type = type;
+							head->types_searched[position].number = 1;
+							type_found = true;
+							break;
+						}
+					}
+				}
+				// Sinon indique a l'utilisateur qu'il n'y a pas de place dans le tableau et exit
+				if(!type_found){
+					return my_error("Pas de place dans types_searched[].\n", file, NO_DECR, 0, UNLOCK, 'b', -1);
+				}
+			}
+			// Signal wcond avant de wait sur rcond
+			wait = true;
 			if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
-			if(pthread_cond_wait(&head->rcond, &head->mutex) > 0) { perror("wait wcond"); exit(-1); }
+			if(pthread_cond_wait(&head->rcond, &head->mutex) > 0) { perror("wait rcond"); exit(-1); }
 		}
+	}
+	if(wait == true){
+		// Si le processus a fait wait, puis a ete reveille et a trouve un message a lire,
+		// il doit decrementer le nombre correspondant au type recherche dans types_searched
+		head->types_searched[position].number--;
 	}
 	return current;
 }

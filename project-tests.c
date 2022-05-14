@@ -40,8 +40,8 @@ int test_processus_paralleles(){
 	// Les 2 fils B : chacun RECEPTIONNE (en mode bloquant) le nombre maximal de messages que peut contenir la file
 	if(pidB == 0){
 		for(int j = 0; j < nbr_msg; j++){
-			if( m_reception(file, mr, sizeof(t), 0, 0) == -0 ){  // debug :  0) == -0        O_NONBLOCK) == -45
-				printf("test_processus_paralleles() : ECHEC : receptions messages n %d.\n", j + 1); return -1;
+			if( m_reception(file, mr, sizeof(t), 0, 0) == 0 ){
+				printf("test_processus_paralleles() : ECHEC : receptions messages n %d.\n", j + 1); _exit(-1);
 			}
 		}
 		_exit(0);
@@ -49,17 +49,19 @@ int test_processus_paralleles(){
 	// Pere et fils A : chacun ENVOIE (en mode bloquant) le nombre maximal de messages que peut contenir la file
 	else if(pidB > 0){
 		for(int j = 0; j < nbr_msg; j++){
-			if( m_envoi( file, me, sizeof(t), 0) != 0 ){ //0) != 0         O_NONBLOCK) == -45
-				printf("test_processus_paralleles() : ECHEC : envois messages n %d.\n", j + 1); return -1;
+			if( m_envoi( file, me, sizeof(t), 0) != 0 ){
+				printf("test_processus_paralleles() : ECHEC : envois messages n %d.\n", j + 1);
+				if(pidA == 0){ _exit(-1); }
+				return -1;
 			}
 		}
 		// Le fils A
-		if(pidA == 0){
-			_exit(0);
-		}
+		if(pidA == 0){ _exit(0); }
 	}
-	while(wait(NULL) > 0)
-					;
+	int status;
+	while(wait(&status) > 0)
+		if(status == -1) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
+	if(status == -1) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
 	if(errno != ECHILD) { printf("test_processus_paralleles() : ECHEC : wait ECHILD\n"); return(-1);}
 
 	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
@@ -67,7 +69,8 @@ int test_processus_paralleles(){
 	// Debug : verifier les valeurs de retour des enfants pour voir si le test a reussi
 
 	// DEBUG : verifier les valeurs des messages et des types lors de la reception
-	printf("test_processus_paralleles() : OK\n\n");
+
+	printf("test_processus_paralleles() : OK\n");
 	return 0;
 }
 
@@ -97,10 +100,8 @@ int main(int argc, const char * argv[]) {
 	test_receptions_multiples(file2, msg_nb);
 	test_compact_messages();
 
-	for(int i = 0; i < 50; i++){
-		printf("\n\nTEST %d\n", i + 1); // debug
-		test_processus_paralleles();
-	}
+	for(int i = 0; i < 10; i++){ test_processus_paralleles(); }
+	printf("\n");
 
 	// Destruction des files
 	if(m_destruction(name1) == -1) { printf("main() : ECHEC : destruction 1\n"); return(-1); }
