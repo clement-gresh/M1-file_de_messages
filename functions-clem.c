@@ -216,6 +216,33 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 }
 
 
+// Renvoie la taille maximale d'un message
+size_t m_message_len(MESSAGE *file){
+	return file->shared_memory->head.max_length_message;
+}
+
+// Renvoie le nombre minimum de messages que peut contenir la file
+size_t m_capacite(MESSAGE *file){
+	return file->shared_memory->head.pipe_capacity;
+}
+
+// Renvoie le nombre de messages actuellement dans la file
+size_t m_nb(MESSAGE *file ){
+	int current = file->shared_memory->head.first_occupied;
+	if(current == -1) { return 0; }
+
+	int msg_nb = 1;
+	int offset = ((mon_message*)&file->shared_memory->messages[current])->offset;
+
+	while(offset != 0){
+		current = current + offset;
+		offset = ((mon_message*)&file->shared_memory->messages[current])->offset;
+		msg_nb = msg_nb + 1;
+	}
+	return msg_nb;
+}
+
+
 // Renvoie un message d'erreur et, si besoin, unlock le mutex, signale une/les condition(s) et assigne une valeur a errno
 int my_error(char *txt, MESSAGE *file, bool decrease, long type, bool unlock, char signal, int error){
 	struct header *head = &file->shared_memory->head;

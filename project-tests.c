@@ -101,7 +101,7 @@ int main(int argc, const char * argv[]) {
 // Verifie les valeurs du message recu (type, length, etc.)
 int reception_check(mon_message *m1, char text[], ssize_t s, ssize_t size, size_t length, int value2, long type){
 	if(s != size || m1->length != length || ((int*)m1->mtext)[2] != value2 || m1->type != type){
-		printf("%s\n", text);
+		printf("%s\n\n", text);
 		printf("Valeurs attendues : retour %ld, length %ld, mtext %d, type %ld.\n", size, length, value2, type);
 		printf("Valeurs recues : retour %ld, length %ld, mtext %d, type %ld.\n", s, m1->length, ((int*)m1->mtext)[2], m1->type);
 		printf("\n");
@@ -110,14 +110,14 @@ int reception_check(mon_message *m1, char text[], ssize_t s, ssize_t size, size_
 	return 0;
 }
 
-// Verifie que les index sont egaux aux valeurs des parametres
+// Verifie les valeurs des index dans la file
 int index_check(MESSAGE* file, char text[], int first_free, int last_free, int first_occupied, int last_occupied){
 	header *head = &file->shared_memory->head;
 
 	if(head->first_free != first_free || head->last_free != last_free
 			|| head->first_occupied != first_occupied || head->last_occupied != last_occupied){
 
-		printf("%s\n", text);
+		printf("%s\n\n", text);
 		printf("Indices cibles : %d, %d, %d, %d\n", first_free, last_free, first_occupied, last_occupied);
 		printf("Indices reels : %d, %d, %d, %d\n",
 				head->first_free, head->last_free, head->first_occupied, head->last_occupied);
@@ -130,7 +130,7 @@ int index_check(MESSAGE* file, char text[], int first_free, int last_free, int f
 // Verifie la valeur de l'offset d'une case de la file
 int offset_check(MESSAGE* file, char text[], int offset, int position){
 	if( ((mon_message *)&file->shared_memory->messages[position])->offset != offset ){
-		printf("%s\n", text);
+		printf("%s\n\n", text);
 		printf("offset voulu : %d\n", offset);
 		printf("offset reel : %ld\n", ((mon_message *)&file->shared_memory->messages[position])->offset);
 		printf("\n");
@@ -142,7 +142,7 @@ int offset_check(MESSAGE* file, char text[], int offset, int position){
 // Verifie les valeurs de retour suite a une erreur
 int error_check(char text[], ssize_t s, int error){
 	if(s != -1 || errno != error){
-		printf("%s\n", text);
+		printf("%s\n\n", text);
 		printf("Valeurs attendues : retour %d, error %d.\n", -1, error);
 		printf("Valeurs recues : retour %ld, error %d.\n", s, errno);
 		printf("\n");
@@ -157,7 +157,7 @@ int test_connexion(){
 	char name1[] = "/nonono";
 	if(test_connexion_simple(name1) == -1) { return -1; } //test connexion simple en O_RDWR | O_CREAT
 	if(test_connexion_read_only() == -1) { return -1; } //test connexion simple en O_RDONLY | O_CREAT
-	if(test_connexion_existe(name1) == -1) { return -1; } // test connexion sur une file existante
+	// if(test_connexion_existe(name1) == -1) { return -1; } // test connexion sur une file existante
 
 	// debug
 	// if(test_connexion_anonyme() == -1) { return -1; } //tester la connexion a une file anonyme par un processus enfant
@@ -176,16 +176,14 @@ int test_connexion_simple(char name[]){
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file == NULL){ printf("test_connexion_simple() : ECHEC : NULL\n"); return -1; }
 
-	struct header *head = &file->shared_memory->head;
-
 	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
-	if(head->pipe_capacity != msg_nb){
-		printf("Target pipe capacity : %d != %d.\n", head->pipe_capacity, msg_nb);
+	if(m_capacite(file) != msg_nb){
+		printf("Target pipe capacity : %ld != %d.\n",m_capacite(file), msg_nb);
 		printf("test_connexion_simple() : ECHEC : erreur pipe_capacity\n");
 		return -1;
 	}
-	if(head->max_length_message != max_message_length){
-		printf("Actual max message length : %ld != %ld.\n", head->max_length_message , max_message_length);
+	if(m_message_len(file) != max_message_length){
+		printf("Actual max message length : %ld != %ld.\n", m_message_len(file), max_message_length);
 		printf("test_connexion_simple() : ECHEC : erreur max_length_message\n");
 		return -1;
 	}
@@ -240,20 +238,16 @@ int test_connexion_anonyme(){
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file = m_connexion(NULL, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
-	if(file == NULL){
-		printf("test_connexion_anonyme() : ECHEC : NULL\n");
-		return -1;
-	}
-	struct header *head = &file->shared_memory->head;
+	if(file == NULL){ printf("test_connexion_anonyme() : ECHEC : file NULL\n"); return -1; }
 
 	// Verifie dans la file les attributs, nombre de messages et longueur max d'un message
-	if(head->pipe_capacity != msg_nb){
-		printf("Target pipe capacity : %d != %d.\n", head->pipe_capacity, msg_nb);
+	if(m_capacite(file) != msg_nb){
+		printf("Target pipe capacity : %ld != %d.\n", m_capacite(file), msg_nb);
 		printf("test_connexion_anonyme() : ECHEC : erreur pipe_capacity\n");
 		return -1;
 	}
-	if(head->max_length_message != max_message_length){
-		printf("Actual max message length : %ld != %ld.\n", head->max_length_message , max_message_length);
+	if(m_message_len(file) != max_message_length){
+		printf("Actual max message length : %ld != %ld.\n", m_message_len(file), max_message_length);
 		printf("test_connexion_anonyme() : ECHEC : erreur max_length_message\n");
 		return -1;
 	}
@@ -302,7 +296,7 @@ int test_deconnexion(){
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file1 = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
-	MESSAGE* file2 = m_connexion(name, O_RDONLY);
+	MESSAGE* file2 = m_connexion(name, O_RDONLY); // debug : ajouter O_CREAT
 	MESSAGE* file3 = m_connexion(name, O_WRONLY);
 
 	// Deconnexion sur file2
@@ -393,7 +387,7 @@ int test_envoi_erreurs(){
 	i = m_envoi( file3, m, sizeof(t), O_RDWR);
 	if(error_check("test_envoi_erreurs() : ECHEC : gestion envoi avec mauvais drapeau.", i, EIO) == -1) {return -1;}
 
-	// Test file Read Only
+	// Test envoi dans une file en lecture seule
 	MESSAGE* file1 = m_connexion("/envoi_erreurs_3", O_RDONLY);
 	i = m_envoi( file1, m, sizeof(t), O_NONBLOCK);
 	char text[] = "test_envoi_erreurs() : ECHEC : gestion envoi dans un tableau read only.";
@@ -412,16 +406,20 @@ int test_envoi(MESSAGE* file){
 	m->type = (long) getpid();
 	memmove( m->mtext, t, sizeof( t ));
 
+	// Verifie qu'il n'y a aucun message dans la file
+	if(m_nb(file) != 0) { printf("test_envoi() : ECHEC : m_nb != 0 avant envoi.\n"); return -1;}
+
 	// Test : envoi en mode bloquant AVEC de la place
-	if( m_envoi( file, m, sizeof(t), 0) != 0 ){
-		printf("test_envoi() : ECHEC : envoie 1er message.\n"); return -1;
-	}
+	if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_envoi() : ECHEC : envoie 1er message.\n"); return -1; }
 
 	// Verifie les valeurs des index
 	if(index_check(file, "test_envoi() : ECHEC : indice.", -1, -1, 0, 0) == -1) { return -1; };
 
 	// Verifie la valeur de l'offset
 	if(offset_check(file, "test_envoi() : ECHEC : offset message.", 0, 0) == -1) { return -1; };
+
+	// Verifie qu'il y a bien un message dans la file
+	if(m_nb(file) != 1) { printf("test_envoi() : ECHEC : m_nb != 1 apres envoi.\n"); return -1;}
 
 	// Test : envoi en mode non bloquant SANS place
 	int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
@@ -448,9 +446,12 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 			printf("test_envois_multiples() : ECHEC : envoie message n %d.\n", j + 1); return -1;
 		}
 
-		// Verifie les valeurs des index tant que le tableau n'est pas plein
+		// Verifie le nombre de messages dans la file
+		if(m_nb(file) != j + 1) { printf("test_envois_multiples() : ECHEC : nombre de messages dans la file.\n"); return -1;}
+
 		size_t free_memory = file->memory_size - sizeof(header);
 
+		// Verifie les valeurs des index tant que le tableau n'est pas plein
 		if(size_msg * (j+2) <= free_memory){
 			char text[] = "test_envois_multiples() : ECHEC : indice envois multiples.";
 			if(index_check(file, text, size_msg * (j+1), size_msg * (j+1), 0, size_msg * (j)) == -1) { return -1; };
@@ -472,7 +473,7 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 	}
 
 	// Test : envoi en mode non bloquant SANS place
-	for(int j = 0; j < 3; j++){
+	for(int j = 0; j < 2; j++){
 		int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
 		char text[] = "test_envois_multiples() : ECHEC : gestion envoi n dans un tableau plein (mode non bloquant).";
 
