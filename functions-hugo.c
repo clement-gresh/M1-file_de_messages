@@ -105,8 +105,8 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 	msg->shared_memory->head.first_free = 0;
 	msg->shared_memory->head.last_free = 0;
 
-	// La place disponible pour les messages
-	((mon_message *)&msg->shared_memory->messages[0])->length = msg->memory_size - sizeof(header);
+	// La place disponible pour le premier message
+	((mon_message *)&msg->shared_memory->messages[0])->length = msg->memory_size - sizeof(header) - sizeof(mon_message);
 	((mon_message *)&msg->shared_memory->messages[0])->offset = 0;
 
 	// Initialisation du mutex et des conditions
@@ -183,6 +183,7 @@ int m_deconnexion(MESSAGE *file){
 	return munmap(addr, file->memory_size);
 }
 
+// Est-ce qu'il ne faut pas d'abord appeler m_deconnexion ? (de telle sorte que ca marche meme si on est deja deconnecte)
 int m_destruction(const char *nom){
 	return shm_unlink(nom);
 }

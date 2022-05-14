@@ -312,7 +312,7 @@ void m_envoi_libres(MESSAGE *file, int current, size_t len){
 
 	// Si current a assez de place libre pour stocker ce message plus un autre
 	if(free_space > 0){
-		//printf("enough free space. Length : %ld, free space : %d\n", ((mon_message *)&messages[current])->length, free_space); // debug
+		// printf("enough free space. Length : %d, free space : %d\n", current_length, free_space); // debug
 		// "Creation" de next
 		int next = current + msg_size;
 		((mon_message *)&messages[next])->length = current_length - msg_size;
@@ -327,7 +327,7 @@ void m_envoi_libres(MESSAGE *file, int current, size_t len){
 
 	// Sinon si current est la premiere case de la LC
 	else if(prev == current){
-		// S'il y a une autre case libre dans la LC ou non
+		// Selon qu'il y a une autre case libre dans la LC ou non
 		if(current_offset != 0){ head->first_free = current + current_offset; }
 		else{ head->first_free = -1; }
 	}

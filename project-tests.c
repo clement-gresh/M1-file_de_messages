@@ -26,8 +26,8 @@ int test_processus_paralleles(){
 
 	// structure pour recevoir un message
 	struct mon_message *mr = malloc(size_msg);
-
-	MESSAGE* file = m_connexion("/processus_paralleles", O_RDWR | O_CREAT, nbr_msg, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	char name[] = "/processus_paralleles";
+	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, nbr_msg, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	// debug : mettre une file anonyme
 
 	// Le pere cree un fils A
@@ -98,33 +98,45 @@ int test_processus_paralleles(){
 	printf("\n\n PERE termine.\n\n"); // debug
 	while(wait(NULL) > 0 && errno != ECHILD)
 					;
+	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
 
 	// Debug : verifier les valeurs de retour des enfants pour voir si le test a reussi
 
 	// DEBUG : verifier les valeurs des messages et des types lors de la reception
-	printf("test_processus_paralleles() : OK\n");
+	printf("test_processus_paralleles() : OK\n\n");
 	return 0;
 }
 
 int main(int argc, const char * argv[]) {
 	printf("\n");
+
+	// Teste connexion / deconnexion
 	test_connexion();
 	test_deconnexion();
 	test_destruction();
 
+	// Teste la bonne gestion des erreurs pour l'envoi et la reception
 	test_envoi_erreurs();
 	test_reception_erreurs();
 
-	MESSAGE* file = m_connexion("/envoi", O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	// Teste l'envoi et la reception
+	char name1[] = "/envoi";
+	MESSAGE* file = m_connexion(name1, O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envoi(file);
 	test_reception(file);
 
+	// Teste l'envoi et la reception de multiples messages
+	char name2[] = "/tests_multiples";
 	int msg_nb = 20; // msg_nb doit etre superieur a 7 pour les tests
-	MESSAGE* file2 = m_connexion("/test_multiples", O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	MESSAGE* file2 = m_connexion(name2, O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
-	test_processus_paralleles();
+	// test_processus_paralleles();
 	test_compact_messages();
+
+	// Destruction des files
+	if(m_destruction(name1) == -1) { printf("main() : ECHEC : destruction 1\n"); return(-1); }
+	if(m_destruction(name2) == -1) { printf("main() : ECHEC : destruction 2\n"); return(-1); }
 
 	return EXIT_SUCCESS;
 }
@@ -241,11 +253,10 @@ int test_connexion_read_only(){
 	char name[] = "/aaaaaaaaaaaaaaaa";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
+
 	MESSAGE* file = m_connexion(name, O_RDONLY | O_CREAT, msg_nb, max_message_length, 0);
-	if(file != NULL){
-		printf("test_connexion_read_only() : ECHEC : file != NULL\n");
-		return -1;
-	}
+	if(file != NULL){ printf("test_connexion_read_only() : ECHEC : file != NULL\n"); return -1; }
+
 	return 0;
 }
 
@@ -409,22 +420,34 @@ int test_envoi_erreurs(){
 	m->type = (long) getpid();
 	memmove( m->mtext, t, sizeof( t ));
 
+
 	// Test envoi d'un message trop long
+	char name2[] = "/envoi_erreurs_2";
 	size_t small_size = sizeof(t) - sizeof(char);
-	MESSAGE* file2 = m_connexion("/envoi_erreurs_2", O_RDWR | O_CREAT, 5, small_size, S_IRWXU | S_IRWXG | S_IRWXO);
+	MESSAGE* file2 = m_connexion(name2, O_RDWR | O_CREAT, 5, small_size, S_IRWXU | S_IRWXG | S_IRWXO);
+
 	int i = m_envoi( file2, m, sizeof(t), O_NONBLOCK);
 	if(error_check("test_envoi_erreurs() : ECHEC : gestion envoi d'un message trop long.", i, EMSGSIZE) == -1) {return -1;}
 
+	if(m_destruction(name2) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 2\n"); return(-1); }
+
+
 	// Test envoi avec mauvais drapeau
-	MESSAGE* file3 = m_connexion("/envoi_erreurs_3", O_RDWR | O_CREAT, 5, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	char name3[] = "/envoi_erreurs_3";
+	MESSAGE* file3 = m_connexion(name3, O_RDWR | O_CREAT, 5, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+
 	i = m_envoi( file3, m, sizeof(t), O_RDWR);
 	if(error_check("test_envoi_erreurs() : ECHEC : gestion envoi avec mauvais drapeau.", i, EIO) == -1) {return -1;}
 
+
 	// Test envoi dans une file en lecture seule
-	MESSAGE* file1 = m_connexion("/envoi_erreurs_3", O_RDONLY);
+	MESSAGE* file1 = m_connexion(name3, O_RDONLY);
+
 	i = m_envoi( file1, m, sizeof(t), O_NONBLOCK);
 	char text[] = "test_envoi_erreurs() : ECHEC : gestion envoi dans un tableau read only.";
 	if(error_check(text, i, EPERM) == -1) {return -1;}
+
+	if(m_destruction(name3) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 3\n"); return(-1); }
 
 	printf("test_envoi_erreurs() : OK\n\n");
 	return 0;
@@ -525,7 +548,8 @@ int test_reception_erreurs(){
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
 	// Test reception avec drapeau incorrect
-	MESSAGE* file = m_connexion("/reception_erreurs_1", O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	char name[] = "/reception_erreurs_1";
+	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	if( m1 == NULL ){ perror("Function test malloc()"); exit(-1); }
 
 	ssize_t s = m_reception(file, m1, sizeof(t), 0, O_RDWR); // O_RDWR au lieu de 0 ou O_NONBLOCK
@@ -545,6 +569,8 @@ int test_reception_erreurs(){
 	*/
 
 	// Test reception si la longueur de la memoire a l'adresse msg est plus petite que le message a lire : debug
+
+	if(m_destruction(name) == -1) { printf("test_reception_erreurs() : ECHEC : destruction\n"); return(-1); }
 
 	printf("test_reception_erreurs() : OK\n\n");
 	return 0;
@@ -759,7 +785,8 @@ int test_compact_messages(){
 	int small_msg_size = sizeof(struct mon_message) + sizeof(u);
 	int big_msg_size = sizeof(struct mon_message) + sizeof(t);
 	int big_msg_nb= 150;
-	MESSAGE* file = m_connexion("/test_compact", O_RDWR | O_CREAT, big_msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	char name[] = "/test_compact";
+	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, big_msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 
 	struct mon_message *m = malloc(sizeof(struct mon_message) + sizeof(u));
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
@@ -769,16 +796,15 @@ int test_compact_messages(){
 
 	// Nombre de petits messages pouvant etre stockes dans la file
 	int small_msg_nb = (int) floor(big_msg_size * big_msg_nb / small_msg_size);
+	size_t free_memory = file->memory_size - sizeof(header);
 
 	// Test envoi du nombre maximal de petits messages
 	for(int j = 0; j < small_msg_nb; j++){
 		if( m_envoi( file, m, sizeof(u), 0) != 0 ){
-			printf("test_compact_messages() : ECHEC : envoie de %d petits message.\n", small_msg_nb); return -1;
+			printf("test_compact_messages() : ECHEC : envoie de %d petits messages.\n", small_msg_nb); return -1;
 		}
 
 		// Verifie les valeurs des index tant que le tableau n'est pas plein
-		size_t free_memory = file->memory_size - sizeof(header);
-
 		if(small_msg_size * (j+2) <= free_memory){
 			char text[] = "test_compact_messages() : ECHEC : indice envois multiples.";
 			if(index_check(file, text, small_msg_size * (j+1), small_msg_size * (j+1), 0, small_msg_size * (j)) == -1)
@@ -788,7 +814,7 @@ int test_compact_messages(){
 		// Verifie les valeurs des index quand le tableau est plein
 		else{
 			char text[] = "test_compact_messages() : ECHEC : indice apres envoi dernier message.";
-			if(index_check(file, text, -1, -1, 0, small_msg_size * (j)) == -1) { return -1; };
+			if(index_check(file, text, -1, -1, 0, small_msg_size * j) == -1) { return -1; };
 		}
 	}
 
@@ -811,6 +837,9 @@ int test_compact_messages(){
 		if(error_check(text, i, EAGAIN) == -1) {return -1;}
 	}
 	// DEBUG : peut probablement factoriser toute les envois avec test_envois_multiples
+
+	// Destruction de la file
+	if(m_destruction(name) == -1) { printf("test_compact_messages() : ECHEC : destruction\n"); return(-1); }
 
 	printf("test_compact_messages() : OK\n\n");
 	return 0;
