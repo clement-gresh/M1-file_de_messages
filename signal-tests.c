@@ -30,3 +30,43 @@ int main(int argc, const char * argv[]) {
 	long type = 1001;
 	m_enregistrement(file, type, SIGUSR1);
 }
+
+/*
+
+	// DEBUG
+	//printf("First free : %d. First occupied : %d\n", head->first_free, head->first_occupied);
+	printf("Debut m_envoi.\nLC LIBRES\n");
+	int temp = head->first_free;
+	int i = 1;
+	if(temp == -1) { printf("vide\n"); }
+	else{
+		while(true){
+			printf("Case %d : postion %d, offset %ld, length %ld\n",
+					i, temp, ((mon_message *)&messages[temp])->offset, ((mon_message *)&messages[temp])->length);
+			if(((mon_message *)&messages[temp])->offset == 0){
+				break;
+			}
+			temp = temp + ((mon_message *)&messages[temp])->offset;
+			i++;
+		}
+	}
+
+	printf("LC OCCUPEES\n");
+	int temp2 = head->first_occupied;
+	int j = 1;
+	if(temp2 == -1) { printf("vide\n"); }
+	else{
+		while(true){
+			printf("Case %d : postion %d, offset %ld, length %ld\n",
+					j, temp2, ((mon_message *)&messages[temp2])->offset, ((mon_message *)&messages[temp2])->length);
+			if(((mon_message *)&messages[temp2])->offset == 0){
+				break;
+			}
+			temp2 = temp2 + ((mon_message *)&messages[temp2])->offset;
+			j++;
+		}
+	}
+	printf("\n");
+	//FIN DEBUG
+
+ */

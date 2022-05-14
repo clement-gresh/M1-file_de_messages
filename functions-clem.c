@@ -109,7 +109,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	m_envoi_libres(file, current, len);
 
 	// Unlock le mutex
-	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
+	//if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); } // debug
 
 	// Signale un processus attendant de pouvoir envoyer
 	if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
@@ -123,10 +123,14 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	m_envoi_occupees(file, current);
 
 	// Synchronise la memoire
-	if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) { perror("m_envoi() -> msync()"); exit(-1); }
+	//if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) { perror("m_envoi() -> msync()"); exit(-1); }
 
 	// Signale un processus attendant de pouvoir recevoir
 	if(pthread_cond_signal(&head->rcond) > 0) {perror("signal rcond"); exit(-1); }
+
+	// DEBUG
+	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); } // debug
+	//FIN DEBUG
 
 	return 0;
 }
@@ -142,6 +146,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 
 	// Lock du mutex
 	if(pthread_mutex_lock(&head->mutex) != 0){ perror("lock mutex"); exit(-1); }
+
 
 	// MAJ de la liste types_searched
 	/*
@@ -195,7 +200,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	}
 
 	// Unlock le mutex
-	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
+	//if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 
 	// Signale des processus attendant de pouvoir recevoir
 	if(pthread_cond_signal(&head->rcond) > 0){perror("signal rcond"); exit(-1); }
@@ -207,10 +212,14 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	m_reception_libres(file, current);
 
 	// Synchronise la memoire
-	if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1){ perror("Function msync()"); exit(-1); }
+	//if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1){ perror("Function msync()"); exit(-1); }
 
 	// Signale des processus attendant de pouvoir envoyer
 	if(pthread_cond_signal(&head->rcond) > 0){ perror("signal wcond"); exit(-1); }
+
+	// DEBUG
+	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
+	//FIN DEBUG
 
 	return msg_size;
 }
@@ -374,6 +383,8 @@ int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag){
 		if(msgflag == O_NONBLOCK) {
 			return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_DECR, 0, UNLOCK, 'b', EAGAIN);
 		}
+		// Signal la condition read avant de wait sur condition la write
+		if(pthread_cond_signal(&head->rcond) > 0){perror("signal rcond"); exit(-1);}
 		if(pthread_cond_wait(&head->wcond, &head->mutex) > 0) { perror("wait wcond"); exit(-1); }
 	}
 	return current;
@@ -472,7 +483,7 @@ int m_reception_recherche(MESSAGE *file, long type, int flags){
 					break;
 				}
 				else if(current == head->last_occupied){
-					 break;
+					break;
 				}
 				else{
 					current = current + ((mon_message *)&messages[current])->offset;
@@ -483,11 +494,10 @@ int m_reception_recherche(MESSAGE *file, long type, int flags){
 		if(flags == O_NONBLOCK && !msg_to_read){
 			return my_error("Pas de message \'type\' (mode non bloquant).\n", file, DECR, type, UNLOCK, 'b', EAGAIN);
 		}
-		// Attente si pas de message et mode bloquant
+		// Attente si pas de message et mode bloquant (et signal la condition d'envoi)
 		else if(!msg_to_read){
-			if(pthread_cond_wait(&head->rcond, &head->mutex) > 0) {
-				perror("wait wcond"); exit(-1);
-			}
+			if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
+			if(pthread_cond_wait(&head->rcond, &head->mutex) > 0) { perror("wait wcond"); exit(-1); }
 		}
 	}
 	return current;

@@ -6,7 +6,6 @@ int t[4] = {-12, 99, 134, 543};
 
 // Faire la fonction tout_a_gauche_defragmentation
 // tester le signal
-// Test deconnexion et destruction
 
 // Ajouter test envois multiples apres receptions multiples
 
@@ -16,7 +15,7 @@ int t[4] = {-12, 99, 134, 543};
 // Test l'envoi et la reception par des processus en parallele
 // 4 processus en parallele : 2 envoient le nombre maximum de message et 2 en receptionne le nombre maximum (mode bloquant)
 int test_processus_paralleles(){
-	int nbr_msg = 2;
+	int nbr_msg = 500;
 	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
 
 	// message a envoyer
@@ -38,66 +37,31 @@ int test_processus_paralleles(){
 	pid_t pidB = fork();
 	if(pidB == -1){ perror("test_processus_paralleles fork() B"); exit(-1); }
 
-	// Les 2 fils B : chacun receptionne (en mode bloquant) le nombre maximal de messages que peut contenir la file
+	// Les 2 fils B : chacun RECEPTIONNE (en mode bloquant) le nombre maximal de messages que peut contenir la file
 	if(pidB == 0){
 		for(int j = 0; j < nbr_msg; j++){
-			if(pidA > 0) {
-				printf("Fils B : AVANT m_reception n %d. Nb de msg : %ld\n", j+1, m_nb(file)); // debug
-			}
-			else{
-				printf("Petit fils AB : AVANT m_reception n %d. Nb de msg : %ld\n", j+1, m_nb(file)); // debug
-			}
-
 			if( m_reception(file, mr, sizeof(t), 0, 0) == -0 ){  // debug :  0) == -0        O_NONBLOCK) == -45
 				printf("test_processus_paralleles() : ECHEC : receptions messages n %d.\n", j + 1); return -1;
 			}
-
-			if(pidA > 0) {
-				printf("Fils B : APRES m_reception n %d. Nb de msg : %ld\n", j+1, m_nb(file)); // debug
-			}
-			else{
-				printf("Petit fils AB : APRES m_reception n %d. Nb de msg : %ld\n", j+1, m_nb(file)); // debug
-			}
-		}
-		printf("Je suis arrive ici\n");
-		if(pidA > 0) {
-			printf("\n\nFils B se termine\n\n"); // debug
-		}
-		else{
-			printf("\n\nPetit fils AB se termine\n\n"); // debug
 		}
 		_exit(0);
 	}
-	// Pere et fils A : chacun envoie (en mode bloquant) le nombre maximal de messages que peut contenir la file
+	// Pere et fils A : chacun ENVOIE (en mode bloquant) le nombre maximal de messages que peut contenir la file
 	else if(pidB > 0){
 		for(int j = 0; j < nbr_msg; j++){
-			if(pidA > 0) {
-				printf("Pere : AVANT m_envoi n %d. Nb de msg : %ld\n", j+1, m_nb(file)); // debug
-			}
-			else{
-				printf("Fils A : AVANT m_envoi n %d. Nb de msg : %ld\n", j+1, m_nb(file)); // debug
-			}
-
 			if( m_envoi( file, me, sizeof(t), 0) != 0 ){ //0) != 0         O_NONBLOCK) == -45
 				printf("test_processus_paralleles() : ECHEC : envois messages n %d.\n", j + 1); return -1;
-			}
-
-			if(pidA > 0) {
-				printf("Pere : APRES m_envoi n %d. Nb de msg : %ld\n", j+1, m_nb(file)); // debug
-			}
-			else{
-				printf("Fils A : APRES m_envoi n %d. Nb de msg : %ld\n", j+1, m_nb(file)); // debug
 			}
 		}
 		// Le fils A
 		if(pidA == 0){
-			printf("\n\n fils A termine.\n\n"); // debug
 			_exit(0);
 		}
 	}
-	printf("\n\n PERE termine.\n\n"); // debug
-	while(wait(NULL) > 0 && errno != ECHILD)
+	while(wait(NULL) > 0)
 					;
+	if(errno != ECHILD) { printf("test_processus_paralleles() : ECHEC : wait ECHILD\n"); return(-1);}
+
 	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
 
 	// Debug : verifier les valeurs de retour des enfants pour voir si le test a reussi
@@ -131,8 +95,12 @@ int main(int argc, const char * argv[]) {
 	MESSAGE* file2 = m_connexion(name2, O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
-	// test_processus_paralleles();
 	test_compact_messages();
+
+	for(int i = 0; i < 50; i++){
+		printf("\n\nTEST %d\n", i + 1); // debug
+		test_processus_paralleles();
+	}
 
 	// Destruction des files
 	if(m_destruction(name1) == -1) { printf("main() : ECHEC : destruction 1\n"); return(-1); }
