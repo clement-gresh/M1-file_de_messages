@@ -230,9 +230,8 @@ int test_connexion_anonyme(){
 	else{
 		// Le pere attend que l'enfant ait termine et verifie sa valeur de retour
 		int status;
-		wait(&status);
+		if(wait(&status) == -1 && errno != ECHILD) { printf("test_connexion_anonyme() : ECHEC : wait ECHILD\n"); return(-1);}
 		if(status == -1) { printf("test_connexion_anonyme() : ECHEC : status child\n"); return(-1); }
-		if(errno != ECHILD) { printf("test_connexion_anonyme() : ECHEC : wait ECHILD\n"); return(-1);}
 	}
 	return 0;
 }
@@ -315,9 +314,8 @@ int test_destruction(){
 	else{
 		// Le pere attend que l'enfant ait termine et verifie sa valeur de retour
 		int status;
-		wait(&status);
-		if(status == -1) { printf("test_connexion_anonyme() : ECHEC : status child\n"); return(-1); }
-		if(errno != ECHILD) { printf("test_connexion_anonyme() : ECHEC : wait ECHILD\n"); return(-1);}
+		if(wait(&status) == -1 && errno != ECHILD) { printf("test_destruction() : ECHEC : wait ECHILD\n"); return(-1);}
+		if(status == -1) { printf("test_destruction() : ECHEC : status child\n"); return(-1); }
 
 		// Tentative de connexion apres destruction (doit echouer)
 		if(m_connexion(name, O_WRONLY) != NULL){
