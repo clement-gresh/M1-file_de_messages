@@ -106,10 +106,11 @@ int is_o_rdonly(int options);
 int is_o_wronly(int options);
 int is_o_rdwr(int options);
 int is_o_excl(int options);
-int private_or_shared(const char *nom);
+int anon_and_shared(const char *nom);
 int build_prot(int options);
 int BitAt(long unsigned int x, int i);
 int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options);
 void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode);
+int file_exists (const char * f);
 
 #endif /* M_FILE_H_ */
