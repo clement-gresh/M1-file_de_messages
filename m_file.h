@@ -16,11 +16,14 @@
 #include <stdarg.h> // pour avoir le nombre d'arguments qui varie dans une meme fonction
 #include <sys/wait.h>
 
+
+// CONSTANTES GLOBALES
 #define UNLOCK true
 #define NO_UNLOCK false
 
 #define RECORD_NB 5					// Liste des processus s'étant enregistre sur la file d'attente des notifications
 #define TYPE_SEARCH_NB 100			// Liste des types de messages recherches par les processus en attente via m_reception
+
 
 // STRUCTURES
 // Permet de stocker les info utiles quand un processus s'enregistre sur la file
@@ -89,11 +92,11 @@ void m_annulation(MESSAGE *file);									// Notifications
 int initialiser_mutex(pthread_mutex_t *pmutex);
 int initialiser_cond(pthread_cond_t *pcond);
 int my_error(char *txt, MESSAGE *file, long type, bool unlock, char signal, int error);
+void m_signal(MESSAGE *file);
 int m_envoi_erreurs(MESSAGE *file, size_t len, int msgflag);
 void m_envoi_libres(MESSAGE *file, int current, size_t len);
 void m_envoi_occupees(MESSAGE *file, int current);
 int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag);
-void m_envoi_signal(MESSAGE *file);
 int m_reception_erreurs(MESSAGE *file, int flags);
 void m_reception_occupees(MESSAGE *file, int current);
 void m_reception_libres(MESSAGE *file, int current);

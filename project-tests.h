@@ -51,4 +51,8 @@ int test_compact_messages();
 // Parallelisme
 int test_processus_paralleles(int msg_nb);
 
+// Notifications
+void handler1(int sig);
+int test_signal();
+
 #endif /* PROJECT_TESTS_H_ */

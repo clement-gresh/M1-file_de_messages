@@ -183,7 +183,6 @@ int m_deconnexion(MESSAGE *file){
 	return munmap(addr, file->memory_size);
 }
 
-// Est-ce qu'il ne faut pas d'abord appeler m_deconnexion ? (de telle sorte que ca marche meme si on est deja deconnecte)
 int m_destruction(const char *nom){
 	return shm_unlink(nom);
 }

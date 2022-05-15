@@ -5,94 +5,9 @@
 int t[4] = {-12, 99, 134, 543};
 
 // Faire la fonction tout_a_gauche_defragmentation
-// tester le signal
 
 // Envoie puis recoit des messages petits pour verifier qu'on peut envoyer plus que nb_msg (memoire compacte)
 // puis envoie des messages plus gros : verifier que la fonction fct_met_tout_a_gauche fonctionne
-
-void handler1(int sig) {}
-
-int test_signal(){
-	// Creation de la file
-	char name1[] = "/test_signal1";
-	size_t msg_size = sizeof( struct mon_message ) + sizeof( t ) ;
-	MESSAGE* file = m_connexion(name1, O_RDWR | O_CREAT , 10, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
-
-	// Definit l'action a faire a la reception de SIGUSR1
-	struct sigaction str;
-	str.sa_handler = handler1;
-	sigfillset(&str.sa_mask);
-	str.sa_flags = 0;
-	if(sigaction(SIGUSR1, &str, NULL)<0){ perror("Function sigaction()"); exit(-1); }
-
-	// Applique un masque contenant seulement SIGUSR1
-	sigset_t block_set, previous_set;
-	sigemptyset(&block_set);
-	sigaddset(&block_set, SIGUSR1);
-	if(sigprocmask(SIG_SETMASK, &block_set, &previous_set) < 0){ perror("Function sigprocmask()"); exit(-1); }
-
-	// Enregistre le processus sur la file d'attente de la file
-	if(m_enregistrement(file, 0, SIGUSR1) == -1) { printf("test_signal() : ECHEC : m_enregistrement.\n"); return(-1); }
-
-	// Creation d'un fils A
-	pid_t pidA = fork();
-	if(pidA == -1){ perror("test_signal fork() A"); exit(-1); }
-
-	else if(pidA == 0){
-		// Creation d'un petit fils B
-		pid_t pidB = fork();
-		if(pidB == -1){ perror("test_signal fork() B"); _exit(-1); }
-
-		else if(pidB == 0){
-			// Le petit-fils B demande a recevoir un message de type 0 en mode bloquant
-			// Il doit recevoir le 1er envoye par A, donc celui de type 1001
-			struct mon_message *mb = malloc(msg_size);
-			if( mb == NULL ){ perror("Function test malloc()"); _exit(-1); }
-			size_t s = m_reception(file, mb, sizeof(t), 0, 0);
-			if(reception_check(mb, "test_signal() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 1001) == -1)
-				{ _exit(-1); }
-			_exit(0);
-		}
-		else{
-			// Le fils A envoie 2 messages dans la file
-			sleep(0.2); // sleep pour assurer que B est deja en attente sur la file
-
-			struct mon_message *ma = malloc(msg_size);
-			if( ma == NULL ){ perror("Function test malloc()"); exit(-1); }
-			memmove( ma->mtext, t, sizeof( t ));
-
-			if(envois_repetes(file, 2, msg_size, ma, O_NONBLOCK) == -1)
-				{ printf(" test_signal()\n\n");  _exit(-1); }
-
-			// A attend que l'enfant B ait termine et verifie sa valeur de retour
-			int status;
-			if(wait(&status) == -1 && errno != ECHILD) { printf("test_signal() : ECHEC : wait ECHILD\n"); _exit(-1);}
-			if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_signal() : ECHEC : status child\n"); _exit(-1); }
-			_exit(0);
-		}
-	}
-	else{
-		// Le pere attend de recevoir SIGUSR1 pour faire m_reception
-		sigsuspend(&previous_set);
-
-		// Une fois le signal recu, le pere appelle m_reception et doit recuperer le 2eme message envoye par A (type 998)
-		struct mon_message *m = malloc(msg_size);
-		if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
-		size_t s = m_reception(file, m, sizeof(t), 0, 0);
-		if(reception_check(m, "test_signal() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 998) == -1)
-			{ return(-1); }
-
-		// Le pere attend que l'enfant A ait termine et verifie sa valeur de retour
-		int status;
-		if(wait(&status) == -1 && errno != ECHILD) { printf("test_signal() : ECHEC : wait ECHILD\n"); return(-1);}
-		if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_signal() : ECHEC : status child\n"); return(-1); }
-	}
-
-	if(m_destruction(name1) == -1) { printf("test_signal() : ECHEC : destruction\n"); return(-1); }
-
-	printf("test_signal() : OK\n");
-	return 0;
-}
 
 int main(int argc, const char * argv[]) {
 	printf("\n");
@@ -125,12 +40,13 @@ int main(int argc, const char * argv[]) {
 	printf("\n");
 
 	// Teste l'enregistrement et l'envoi de signaux
-	for(int i = 0; i < 10; i++){ test_signal(); }
-	printf("\n");
+	test_signal();
 
 	// Destruction des files
 	if(m_destruction(name1) == -1) { printf("main() : ECHEC : destruction 1\n"); return(-1); }
 	if(m_destruction(name2) == -1) { printf("main() : ECHEC : destruction 2\n"); return(-1); }
+	if(m_deconnexion(file) != 0){ perror("main : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+	if(m_deconnexion(file2) != 0){ perror("main : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
 	return EXIT_SUCCESS;
 }
@@ -376,6 +292,7 @@ int test_connexion_excl(){
 	if(file2 != NULL){ printf("test_connexion_excl() : ECHEC : connexion file existante avec O_EXCL\n"); return -1; }
 
 	if(m_destruction(name) != 0){ perror("test_connexion_excl : ECHEC : m_destruction()\n"); return -1; }
+	if(m_deconnexion(file) != 0){ perror("test_connexion_excl : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
 	return 0;
 }
@@ -455,6 +372,7 @@ int test_destruction(){
 		if( m_envoi( file1, m, sizeof(t), 0) == -1 ){
 			printf("test_destruction() : ECHEC de l'envoi d'un message apres destruction de la file.\n"); return -1;
 		}
+		if(m_deconnexion(file1) != 0){ perror("test_destruction : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 	}
 
 	printf("test_destruction() : OK\n\n");
@@ -477,6 +395,7 @@ int test_envoi_erreurs(){
 	int i = m_envoi( file2, m, sizeof(t), O_NONBLOCK);
 	if(error_check("test_envoi_erreurs() : ECHEC : gestion envoi d'un message trop long.", i, EMSGSIZE) == -1) {return -1;}
 	if(m_destruction(name2) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 2\n"); return(-1); }
+	if(m_deconnexion(file2) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
 	// TESTE envoi avec mauvais drapeau
 	char name3[] = "/envoi_erreurs_3";
@@ -490,6 +409,8 @@ int test_envoi_erreurs(){
 	char text[] = "test_envoi_erreurs() : ECHEC : gestion envoi dans un tableau read only.";
 	if(error_check(text, i, EPERM) == -1) {return -1;}
 	if(m_destruction(name3) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 3\n"); return(-1); }
+	if(m_deconnexion(file3) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+	if(m_deconnexion(file1) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
 	printf("test_envoi_erreurs() : OK\n\n");
 	return 0;
@@ -568,8 +489,9 @@ int test_reception_erreurs(){
 	if(error_check("test_reception_erreurs() : ECHEC : gestion buffer trop petit.", s, EMSGSIZE) == -1)
 		{return -1;}
 
-
+	// Destruction de la file
 	if(m_destruction(name) == -1) { printf("test_reception_erreurs() : ECHEC : destruction\n"); return(-1); }
+	if(m_deconnexion(file) != 0){ perror("test_reception_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
 	printf("test_reception_erreurs() : OK\n\n");
 	return 0;
@@ -789,6 +711,7 @@ int test_compact_messages(){
 
 	// Destruction de la file
 	if(m_destruction(name) == -1) { printf("test_compact_messages() : ECHEC : destruction\n"); return(-1); }
+	if(m_deconnexion(file) != 0){ perror("test_compact_messages : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
 	printf("test_compact_messages() : OK\n\n");
 	return 0;
@@ -850,10 +773,101 @@ int test_processus_paralleles(int msg_nb){
 	if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
 	if(errno != ECHILD) { printf("test_processus_paralleles() : ECHEC : wait ECHILD\n"); return(-1);}
 
+	// Destruction de la file
 	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
+	if(m_deconnexion(file) != 0){ perror("test_processus_paralleles : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
 	printf("test_processus_paralleles() : OK\n");
 	return 0;
 }
 
+
+// Teste l'envoi d'un signal a un processus s'etant enregistre sur la file via m_enregistrement
+void handler1(int sig) {}
+
+int test_signal(){
+	// Creation de la file
+	char name1[] = "/test_signal_27";
+	size_t msg_size = sizeof( struct mon_message ) + sizeof( t ) ;
+	MESSAGE* file = m_connexion(name1, O_RDWR | O_CREAT , 10, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+
+	// Definit l'action a faire a la reception de SIGUSR1
+	struct sigaction str;
+	str.sa_handler = handler1;
+	sigfillset(&str.sa_mask);
+	str.sa_flags = 0;
+	if(sigaction(SIGUSR1, &str, NULL)<0){ perror("Function sigaction()"); exit(-1); }
+
+	// Applique un masque contenant seulement SIGUSR1
+	sigset_t block_set, previous_set;
+	sigemptyset(&block_set);
+	sigaddset(&block_set, SIGUSR1);
+	if(sigprocmask(SIG_SETMASK, &block_set, &previous_set) < 0){ perror("Function sigprocmask()"); exit(-1); }
+
+	// Enregistre le processus sur la file d'attente de la file
+	if(m_enregistrement(file, 0, SIGUSR1) == -1) { printf("test_signal() : ECHEC : m_enregistrement.\n"); return(-1); }
+
+	// Creation d'un fils A
+	pid_t pidA = fork();
+	if(pidA == -1){ perror("test_signal fork() A"); exit(-1); }
+
+	else if(pidA == 0){
+		// Creation d'un petit fils B
+		pid_t pidB = fork();
+		if(pidB == -1){ perror("test_signal fork() B"); _exit(-1); }
+
+		else if(pidB == 0){
+			// Le petit-fils B demande a recevoir un message de type 0 en mode bloquant
+			// Il doit recevoir le 1er envoye par A, donc celui de type 1001
+			struct mon_message *mb = malloc(msg_size);
+			if( mb == NULL ){ perror("Function test malloc()"); _exit(-1); }
+			size_t s = m_reception(file, mb, sizeof(t), 0, 0);
+			if(reception_check(mb, "test_signal() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 1001) == -1)
+				{ _exit(-1); }
+			_exit(0);
+		}
+		else{
+			// Le fils A envoie 2 messages dans la file
+			sleep(0.2); // sleep pour assurer que B est deja en attente sur la file
+
+			struct mon_message *ma = malloc(msg_size);
+			if( ma == NULL ){ perror("Function test malloc()"); exit(-1); }
+			memmove( ma->mtext, t, sizeof( t ));
+
+			if(envois_repetes(file, 2, msg_size, ma, O_NONBLOCK) == -1)
+				{ printf(" test_signal()\n\n");  _exit(-1); }
+
+			// A attend que l'enfant B ait termine et verifie sa valeur de retour
+			int status;
+			if(wait(&status) == -1 && errno != ECHILD) { printf("test_signal() : ECHEC : wait ECHILD\n"); _exit(-1);}
+			if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_signal() : ECHEC : status child\n"); _exit(-1); }
+			_exit(0);
+		}
+	}
+	else{
+		// Le pere attend de recevoir SIGUSR1 pour faire m_reception
+		sigsuspend(&previous_set);
+
+		// Une fois le signal recu, le pere appelle m_reception et doit recuperer le 2eme message envoye par A (type 998)
+		struct mon_message *m = malloc(msg_size);
+		if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
+		size_t s = m_reception(file, m, sizeof(t), 0, 0);
+		if(reception_check(m, "test_signal() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 998) == -1)
+			{ return(-1); }
+
+		// Remet le mask a sa valeur initiale
+		if(sigprocmask(SIG_SETMASK, &previous_set, NULL) < 0){ perror("Function sigprocmask()"); exit(-1); }
+
+		// Le pere attend que l'enfant A ait termine et verifie sa valeur de retour
+		int status;
+		if(wait(&status) == -1 && errno != ECHILD) { printf("test_signal() : ECHEC : wait ECHILD\n"); return(-1);}
+		if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_signal() : ECHEC : status child\n"); return(-1); }
+	}
+
+	if(m_destruction(name1) == -1) { printf("test_signal() : ECHEC : destruction\n"); return(-1); }
+	if(m_deconnexion(file) != 0){ perror("test_signal : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+
+	printf("test_signal() : OK\n\n");
+	return 0;
+}
 

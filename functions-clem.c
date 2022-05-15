@@ -2,68 +2,6 @@
 
 // <>
 
-// Enregistre sur la file d'attente un processus qui souhaite recevoir un signal 'sig' lorsqu'un message
-// de type 'type' est disponible
-// Rretour : 0 en cas de succès, -1 sinon
-int m_enregistrement(MESSAGE *file, long type, int sig){
-	struct header *head = &file->shared_memory->head;
-	int current = 0;
-
-	while(current < RECORD_NB && head->records[current].pid != -1){
-		current = current + 1;
-	}
-	if(current != RECORD_NB){
-		head->records[current].pid = getpid();
-		head->records[current].signal = sig;
-		head->records[current].type = type;
-		return 0;
-	}
-	return -1;
-}
-
-// Enleve le processus de la file d'attente (y compris si il y apparait plusieurs fois)
-void m_annulation(MESSAGE *file){
-	struct header *head = &file->shared_memory->head;
-
-	for(int i = 0; i < RECORD_NB; i++){
-		if(head->records[i].pid == getpid()) {
-			head->records[i].pid = -1;
-		}
-	}
-}
-
-// Envoi un signal aux processus enregistres sur la file d'attente apres avoir verifie si les conditions sont satisfaites
-void m_envoi_signal(MESSAGE *file){
-	struct header *head = &file->shared_memory->head;
-
-	for(int i = 0; i < RECORD_NB; i++){
-		// Recherche si un processus est enregistre pour ce type de message
-		if(head->records[i].pid != -1){
-			bool can_signal = true;
-			int k = 0;
-
-			// Verifie qu'il n'y a aucun pocessus suspendu en attente de ce message
-			while(k < TYPE_SEARCH_NB){
-				if(head->types_searched[k].number > 0 &&
-						(head->types_searched[k].type == 0
-						|| head->types_searched[k].type == head->records[i].type
-						|| -head->types_searched[k].type > head->records[i].type))
-				{
-					can_signal = false;
-					break;
-				}
-				k++;
-			}
-			// Envoie le signal au processus si les conditions sont verifies
-			if(can_signal){
-				kill(head->records[i].pid, head->records[i].signal);
-				head->records[i].pid = -1;
-			}
-		}
-	}
-}
-
-
 // debug : maj des LC des cases libres et occupees sont symetriques. Peut probablement les factoriser dans une seule fonction
 
 int enough_space(MESSAGE *file, size_t len){
@@ -129,7 +67,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	//if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) { perror("m_envoi() -> msync()"); exit(-1); }
 
 	// Signale si besoin les processus qui sont sur la liste d'attente des notifications
-	m_envoi_signal(file);
+	m_signal(file);
 
 	// Signale un processus attendant de pouvoir recevoir
 	if(pthread_cond_signal(&head->rcond) > 0) {perror("signal rcond"); exit(-1); }
@@ -182,7 +120,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	//if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1){ perror("Function msync()"); exit(-1); }
 
 	// Signale si besoin les processus qui sont sur la liste d'attente des notifications
-	m_envoi_signal(file);
+	m_signal(file);
 
 	// Signale des processus attendant de pouvoir envoyer
 	if(pthread_cond_signal(&head->rcond) > 0){ perror("signal wcond"); exit(-1); }
@@ -221,7 +159,38 @@ size_t m_nb(MESSAGE *file ){
 	return msg_nb;
 }
 
+// Enregistre sur la file d'attente un processus qui souhaite recevoir un signal 'sig' lorsqu'un message
+// de type 'type' est disponible
+// Retour : 0 en cas de succès, -1 sinon
+int m_enregistrement(MESSAGE *file, long type, int sig){
+	struct header *head = &file->shared_memory->head;
+	int current = 0;
 
+	while(current < RECORD_NB && head->records[current].pid != -1){
+		current = current + 1;
+	}
+	if(current != RECORD_NB){
+		head->records[current].pid = getpid();
+		head->records[current].signal = sig;
+		head->records[current].type = type;
+		return 0;
+	}
+	return -1;
+}
+
+// Enleve le processus de la file d'attente (y compris s'il y apparait plusieurs fois)
+void m_annulation(MESSAGE *file){
+	struct header *head = &file->shared_memory->head;
+
+	for(int i = 0; i < RECORD_NB; i++){
+		if(head->records[i].pid == getpid()) {
+			head->records[i].pid = -1;
+		}
+	}
+}
+
+
+// FONCTIONS AUXILIAIRES
 // Renvoie un message d'erreur et, si besoin, unlock le mutex, signale une/les condition(s) et assigne une valeur a errno
 int my_error(char *txt, MESSAGE *file, long type, bool unlock, char signal, int error){
 	struct header *head = &file->shared_memory->head;
@@ -239,6 +208,39 @@ int my_error(char *txt, MESSAGE *file, long type, bool unlock, char signal, int 
 	if(error > 0) { errno = error; }
 	return -1;
 }
+
+// FONCTIONS AUXILIAIRES DE M_ENREGISTREMENT
+// Envoi un signal aux processus enregistres sur la file d'attente apres avoir verifie si les conditions sont satisfaites
+void m_signal(MESSAGE *file){
+	struct header *head = &file->shared_memory->head;
+
+	for(int i = 0; i < RECORD_NB; i++){
+		// Recherche si un processus est enregistre pour ce type de message
+		if(head->records[i].pid != -1){
+			bool can_signal = true;
+			int k = 0;
+
+			// Verifie qu'il n'y a aucun pocessus suspendu en attente de ce message
+			while(k < TYPE_SEARCH_NB){
+				if(head->types_searched[k].number > 0 &&
+						(head->types_searched[k].type == 0
+						|| head->types_searched[k].type == head->records[i].type
+						|| -head->types_searched[k].type > head->records[i].type))
+				{
+					can_signal = false;
+					break;
+				}
+				k++;
+			}
+			// Envoie le signal au processus si les conditions sont verifies
+			if(can_signal){
+				kill(head->records[i].pid, head->records[i].signal);
+				head->records[i].pid = -1;
+			}
+		}
+	}
+}
+
 
 
 // FONCTIONS AUXILIAIRES DE M_ENVOI
