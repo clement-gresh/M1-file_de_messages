@@ -49,6 +49,7 @@ int m_deconnexion(MESSAGE *file){
 	return munmap(addr, file->memory_size);
 }
 
+
 int m_destruction(const char *nom){
 	return shm_unlink(nom);
 }
@@ -99,7 +100,6 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 
 	return 0;
 }
-
 
 
 ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
@@ -178,7 +178,7 @@ size_t m_nb(MESSAGE *file ){
 	return msg_nb;
 }
 
-// Enregistre sur la file d'attente un processus qui souhaite recevoir un signal 'sig' lorsqu'un message
+// Enregistre sur une file d'attente un processus qui souhaite recevoir un signal 'sig' lorsqu'un message
 // de type 'type' est disponible
 // Retour : 0 en cas de succès, -1 sinon
 int m_enregistrement(MESSAGE *file, long type, int sig){
@@ -261,6 +261,7 @@ int is_type_available(MESSAGE *file, long type){
 
 // FONCTIONS AUXILIAIRES DE M_CONNEXION
 
+// Initialise un mutex
 int initialiser_mutex(pthread_mutex_t *pmutex){
 	pthread_mutexattr_t mutexattr;
 	int code;
@@ -272,6 +273,7 @@ int initialiser_mutex(pthread_mutex_t *pmutex){
 	return code;
 }
 
+// Initialise une condition (mutex)
 int initialiser_cond(pthread_cond_t *pcond){
 	pthread_condattr_t condattr;
 	int code;
@@ -282,9 +284,9 @@ int initialiser_cond(pthread_cond_t *pcond){
 	return code;
 }
 
-// nom doit commencer par un unique /
-//size_t nb_msg, size_t len_max, mode_t mode
 
+// Creation d'une file et initialisation de tous ses parametres
+// Retourne 0 en cas de succès, -1 en cas d'echec
 int build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
 
 	// Creation de la memoire partagee avec shm_open
@@ -345,15 +347,20 @@ int build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb_
 	return 0;
 }
 
+// Connexion a une file deja existante
+// Retourne 0 en cas de succès, -1 en cas d'echec
 int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
 
+	// Une connexion en ecriture seule est automatiquement passee en lecture et ecriture (necessaire sur certains sytemes)
 	if(is_o_wronly(options)){ options = O_RDWR; }
 
+	// Connexion a la memoire partagee et verification des erreurs
 	int fd = shm_open(nom, options, 0);
 	if( fd == -1 && errno == EEXIST) { printf("connex_msg : La file existe deja et drapeau O_EXCL.\n"); return -1; }
 	else if( fd == -1 && errno == ENOENT) { printf("connex_msg : file n'existe pas et pas de drapeau O_CREAT.\n"); return -1; }
 	else if( fd == -1 ){ perror("shm_open dans connex_msg"); exit(EXIT_FAILURE); }
 
+	// Projection en memoire
 	struct stat bufStat;
 	fstat(fd, &bufStat);
 
@@ -362,12 +369,15 @@ int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
 	addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
 	if( (void*) addr == MAP_FAILED) { perror("Function mmap()"); exit(EXIT_FAILURE); }
 
-	msg->memory_size = sizeof(header) + addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
+	// Initialisation des champs de la structure MESSAGE
+	msg->memory_size = sizeof(header)
+			+ addr->head.pipe_capacity * (addr->head.max_length_message * sizeof(char) + sizeof(mon_message));
 	msg->flag = options;
 	msg->shared_memory = addr;
 	return 0;
 }
 
+// Verifie si une file existe deja
 int file_exists (const char * f){
     struct stat buff;
     if (stat(f, &buff) != 0) return 0;
@@ -381,6 +391,7 @@ int BitAt(long unsigned int x, int i){
 	return (x >> i) & 1;
 }
 
+// Cree le drapeau 'prot' a partir du drapeau 'option' afin d'etre adapte a mmap
 int build_prot(int options){
 	int prot = 0;
 
@@ -393,14 +404,13 @@ int build_prot(int options){
 	else if(is_o_wronly(options)){
 		prot = PROT_WRITE;
 	}
-
 	if(is_o_excl(options)){
 		prot = prot | PROT_EXEC;
-
 	}
 	return prot;
 }
 
+// Verifie si le drapeau O_CREAT est indique dans les options
 int is_o_creat(int options){
 	int k=0;
 	int creat = O_CREAT;
@@ -412,6 +422,7 @@ int is_o_creat(int options){
 	return (options>>k)&1;
 }
 
+// Verifie si le drapeau O_RDONLY est indique dans les options
 int is_o_rdonly(int options){
 	if( is_o_rdwr(options) ){
 		return 0;
@@ -419,6 +430,7 @@ int is_o_rdonly(int options){
 	return !(options&1);
 }
 
+// Verifie si le drapeau O_WRONLY est indique dans les options
 int is_o_wronly(int options){
 	if( is_o_rdwr(options) ){
 		return 0;
@@ -426,10 +438,12 @@ int is_o_wronly(int options){
 	return options&1;
 }
 
+// Verifie si le drapeau O_RDWR est indique dans les options
 int is_o_rdwr(int options){
 	return (options>>1)&1;
 }
 
+// Verifie si le drapeau O_EXCL est indique dans les options
 int is_o_excl(int options){
 	int k=0;
 	int excl = O_EXCL;
@@ -441,6 +455,7 @@ int is_o_excl(int options){
 	return (options>>k)&1;
 }
 
+//
 int anon_and_shared(const char *nom){
 	if(nom==NULL){
 		return MAP_SHARED | MAP_ANON;
@@ -558,6 +573,7 @@ int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag){
 	return current;
 }
 
+// Recherche si une case libre d'une taille suffisante est libre (defragmente la memoire si besoin)
 int search_free_cell(MESSAGE *file, size_t len){
 	char *messages = file->shared_memory->messages;
 	struct header *head = &file->shared_memory->head;
@@ -732,6 +748,8 @@ int m_reception_type_searched(MESSAGE *file, long type){
 
 // FONCTIONS AUXILIAIRES POUR MESSAGES COMPACTES
 
+// Defragmente la memoire partagee si cela permet de creer une case libre suffisament grande pour stocker
+// un message de longueur 'len'
 bool defragmentation(MESSAGE *file, size_t len){
 	char *messages = file->shared_memory->messages;
 	struct header *head = &file->shared_memory->head;
@@ -794,7 +812,8 @@ bool defragmentation(MESSAGE *file, size_t len){
 	return false;
 }
 
-
+// Determine si defragment la memoire partagee permettrait de creer une case libre suffisament grande pour stocker
+// un message de longueur 'len'
 bool is_memory_lost(MESSAGE *file, size_t len){
 	char *messages = file->shared_memory->messages;
 	struct header *head = &file->shared_memory->head;
