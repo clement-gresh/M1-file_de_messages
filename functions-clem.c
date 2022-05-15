@@ -128,7 +128,7 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	// Synchronise la memoire
 	//if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1) { perror("m_envoi() -> msync()"); exit(-1); }
 
-	// Signale les processus qui sont sur la liste d'attente si besoin
+	// Signale si besoin les processus qui sont sur la liste d'attente des notifications
 	m_envoi_signal(file);
 
 	// Signale un processus attendant de pouvoir recevoir
@@ -160,7 +160,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	// Erreur si buffer trop petit pour recevoir le message
 	ssize_t msg_size = ((mon_message *)&messages[current])->length;
 	if(msg_size > len){
-		return my_error("Memoire allouee trop petite pour recevoir le message.\n", file, DECR, type, UNLOCK, 'b', EMSGSIZE);
+		return my_error("Memoire allouee trop petite pour recevoir le message.\n", file, type, UNLOCK, 'b', EMSGSIZE);
 	}
 
 	// Maj de la liste chainee des cases occupees
@@ -180,6 +180,9 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 
 	// Synchronise la memoire
 	//if(msync(file->shared_memory, sizeof(file->memory_size), MS_SYNC) == -1){ perror("Function msync()"); exit(-1); }
+
+	// Signale si besoin les processus qui sont sur la liste d'attente des notifications
+	m_envoi_signal(file);
 
 	// Signale des processus attendant de pouvoir envoyer
 	if(pthread_cond_signal(&head->rcond) > 0){ perror("signal wcond"); exit(-1); }
@@ -220,19 +223,10 @@ size_t m_nb(MESSAGE *file ){
 
 
 // Renvoie un message d'erreur et, si besoin, unlock le mutex, signale une/les condition(s) et assigne une valeur a errno
-int my_error(char *txt, MESSAGE *file, bool decrease, long type, bool unlock, char signal, int error){
+int my_error(char *txt, MESSAGE *file, long type, bool unlock, char signal, int error){
 	struct header *head = &file->shared_memory->head;
 	printf("%s", txt);
-	/*
-	if(decrease){
-		int i = 0;
-		while(head->types_searched[i].type != type && i != TYPE_SEARCH_NB){ i++; }
 
-		// debug : cette partie n'est normalement pas utile
-		if(i == TYPE_SEARCH_NB){ printf("le type ne peut etre trouve dans types_seached.\n"); exit(-1);	}
-
-		head->types_searched[i].number--;
-	}*/
 	if(unlock){
 		if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 	}
@@ -254,13 +248,13 @@ int m_envoi_erreurs(MESSAGE *file, size_t len, int msgflag){
 	struct header *head = &file->shared_memory->head;
 
 	if(file->flag == O_RDONLY){
-		return my_error("Impossible d'ecrire dans cette file.\n", file, NO_DECR, 0, NO_UNLOCK, 'n', EPERM);
+		return my_error("Impossible d'ecrire dans cette file.\n", file, 0, NO_UNLOCK, 'n', EPERM);
 	}
 	if(len > head->max_length_message){
-		return my_error("La taille du message excede la taille maximale.\n", file, NO_DECR, 0, NO_UNLOCK, 'b', EMSGSIZE);
+		return my_error("La taille du message excede la taille maximale.\n", file, 0, NO_UNLOCK, 'b', EMSGSIZE);
 	}
 	if(msgflag != 0 && msgflag != O_NONBLOCK){
-		return my_error("Valeur de msgflag incorrecte dans m_envoi.\n", file, NO_DECR, 0, NO_UNLOCK, 'b', EIO);
+		return my_error("Valeur de msgflag incorrecte dans m_envoi.\n", file, 0, NO_UNLOCK, 'b', EIO);
 	}
 	return 0;
 }
@@ -288,7 +282,6 @@ void m_envoi_libres(MESSAGE *file, int current, size_t len){
 
 	// Si current a assez de place libre pour stocker ce message plus un autre
 	if(free_space > 0){
-		// printf("enough free space. Length : %d, free space : %d\n", current_length, free_space); // debug
 		// "Creation" de next
 		int next = current + msg_size;
 		((mon_message *)&messages[next])->length = current_length - msg_size;
@@ -348,7 +341,7 @@ int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag){
 
 	while((current = enough_space(file, len)) == -1){
 		if(msgflag == O_NONBLOCK) {
-			return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, NO_DECR, 0, UNLOCK, 'b', EAGAIN);
+			return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, 0, UNLOCK, 'b', EAGAIN);
 		}
 		// Signal la condition read avant de wait sur condition la write
 		if(pthread_cond_signal(&head->rcond) > 0){perror("signal rcond"); exit(-1);}
@@ -362,10 +355,10 @@ int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag){
 // Verifie l'absence d'erreur dans les parametres d'appel de m_reception
 int m_reception_erreurs(MESSAGE *file, int flags){
 	if(file->flag == O_WRONLY){
-		return my_error("Impossible de lire les message de cette file.\n", file, NO_DECR, 0, NO_UNLOCK, 'w', EPERM);
+		return my_error("Impossible de lire les message de cette file.\n", file, 0, NO_UNLOCK, 'w', EPERM);
 	}
 	if(flags != 0 && flags != O_NONBLOCK){
-		return my_error("Valeur de msgflag incorrecte dans m_reception.\n", file, NO_DECR, 0, NO_UNLOCK, 'b', EIO);
+		return my_error("Valeur de msgflag incorrecte dans m_reception.\n", file, 0, NO_UNLOCK, 'b', EIO);
 	}
 	return 0;
 }
@@ -461,7 +454,7 @@ int m_reception_recherche(MESSAGE *file, long type, int flags){
 		}
 		// Exit si pas de message et mode non bloquant
 		if(flags == O_NONBLOCK && !msg_to_read){
-			return my_error("Pas de message \'type\' (mode non bloquant).\n", file, DECR, type, UNLOCK, 'b', EAGAIN);
+			return my_error("Pas de message \'type\' (mode non bloquant).\n", file, type, UNLOCK, 'b', EAGAIN);
 		}
 		// Attente si pas de message et mode bloquant (et signal la condition d'envoi)
 		else if(!msg_to_read){
@@ -492,7 +485,7 @@ int m_reception_recherche(MESSAGE *file, long type, int flags){
 				}
 				// Sinon indique a l'utilisateur qu'il n'y a pas de place dans le tableau et exit
 				if(!type_found){
-					return my_error("Pas de place dans types_searched[].\n", file, NO_DECR, 0, UNLOCK, 'b', -1);
+					return my_error("Pas de place dans types_searched[].\n", file, 0, UNLOCK, 'b', -1);
 				}
 			}
 			// Signal wcond avant de wait sur rcond

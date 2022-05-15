@@ -10,11 +10,87 @@ int t[4] = {-12, 99, 134, 543};
 // Envoie puis recoit des messages petits pour verifier qu'on peut envoyer plus que nb_msg (memoire compacte)
 // puis envoie des messages plus gros : verifier que la fonction fct_met_tout_a_gauche fonctionne
 
+void handler1(int sig) {}
+
 int test_signal(){
-	char name1[] = "/test_signal";
-	MESSAGE* file = m_connexion(name1, O_RDWR | O_CREAT | O_EXCL, 10, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
+	// Creation de la file
+	char name1[] = "/test_signal1";
+	size_t msg_size = sizeof( struct mon_message ) + sizeof( t ) ;
+	MESSAGE* file = m_connexion(name1, O_RDWR | O_CREAT , 10, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 
+	// Definit l'action a faire a la reception de SIGUSR1
+	struct sigaction str;
+	str.sa_handler = handler1;
+	sigfillset(&str.sa_mask);
+	str.sa_flags = 0;
+	if(sigaction(SIGUSR1, &str, NULL)<0){ perror("Function sigaction()"); exit(-1); }
 
+	// Applique un masque contenant seulement SIGUSR1
+	sigset_t block_set, previous_set;
+	sigemptyset(&block_set);
+	sigaddset(&block_set, SIGUSR1);
+	if(sigprocmask(SIG_SETMASK, &block_set, &previous_set) < 0){ perror("Function sigprocmask()"); exit(-1); }
+
+	// Enregistre le processus sur la file d'attente de la file
+	if(m_enregistrement(file, 0, SIGUSR1) == -1) { printf("test_signal() : ECHEC : m_enregistrement.\n"); return(-1); }
+
+	// Creation d'un fils A
+	pid_t pidA = fork();
+	if(pidA == -1){ perror("test_signal fork() A"); exit(-1); }
+
+	else if(pidA == 0){
+		// Creation d'un petit fils B
+		pid_t pidB = fork();
+		if(pidB == -1){ perror("test_signal fork() B"); _exit(-1); }
+
+		else if(pidB == 0){
+			// Le petit-fils B demande a recevoir un message de type 0 en mode bloquant
+			// Il doit recevoir le 1er envoye par A, donc celui de type 1001
+			struct mon_message *mb = malloc(msg_size);
+			if( mb == NULL ){ perror("Function test malloc()"); _exit(-1); }
+			size_t s = m_reception(file, mb, sizeof(t), 0, 0);
+			if(reception_check(mb, "test_signal() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 1001) == -1)
+				{ _exit(-1); }
+			_exit(0);
+		}
+		else{
+			// Le fils A envoie 2 messages dans la file
+			sleep(0.2); // sleep pour assurer que B est deja en attente sur la file
+
+			struct mon_message *ma = malloc(msg_size);
+			if( ma == NULL ){ perror("Function test malloc()"); exit(-1); }
+			memmove( ma->mtext, t, sizeof( t ));
+
+			if(envois_repetes(file, 2, msg_size, ma, O_NONBLOCK) == -1)
+				{ printf(" test_signal()\n\n");  _exit(-1); }
+
+			// A attend que l'enfant B ait termine et verifie sa valeur de retour
+			int status;
+			if(wait(&status) == -1 && errno != ECHILD) { printf("test_signal() : ECHEC : wait ECHILD\n"); _exit(-1);}
+			if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_signal() : ECHEC : status child\n"); _exit(-1); }
+			_exit(0);
+		}
+	}
+	else{
+		// Le pere attend de recevoir SIGUSR1 pour faire m_reception
+		sigsuspend(&previous_set);
+
+		// Une fois le signal recu, le pere appelle m_reception et doit recuperer le 2eme message envoye par A (type 998)
+		struct mon_message *m = malloc(msg_size);
+		if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
+		size_t s = m_reception(file, m, sizeof(t), 0, 0);
+		if(reception_check(m, "test_signal() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 998) == -1)
+			{ return(-1); }
+
+		// Le pere attend que l'enfant A ait termine et verifie sa valeur de retour
+		int status;
+		if(wait(&status) == -1 && errno != ECHILD) { printf("test_signal() : ECHEC : wait ECHILD\n"); return(-1);}
+		if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_signal() : ECHEC : status child\n"); return(-1); }
+	}
+
+	if(m_destruction(name1) == -1) { printf("test_signal() : ECHEC : destruction\n"); return(-1); }
+
+	printf("test_signal() : OK\n");
 	return 0;
 }
 
@@ -46,6 +122,10 @@ int main(int argc, const char * argv[]) {
 
 	// Teste la gestion de envoi et reception sur des processus en parallele
 	for(int i = 0; i < 10; i++){ test_processus_paralleles(500); }
+	printf("\n");
+
+	// Teste l'enregistrement et l'envoi de signaux
+	for(int i = 0; i < 10; i++){ test_signal(); }
 	printf("\n");
 
 	// Destruction des files
@@ -259,7 +339,7 @@ int test_connexion_anonyme(){
 	pid_t pid = fork();
 	if(pid == -1){ perror("test_connexion_anonyme fork() "); exit(-1); }
 
-	if(pid == 0){
+	else if(pid == 0){
 		// Teste envoi d'un message sur la file par l'enfant
 		struct mon_message *m = malloc( sizeof( struct mon_message ) + sizeof( t ) );
 		if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
@@ -273,7 +353,8 @@ int test_connexion_anonyme(){
 		// Le pere attend que l'enfant ait termine et verifie sa valeur de retour
 		int status;
 		if(wait(&status) == -1 && errno != ECHILD) { printf("test_connexion_anonyme() : ECHEC : wait ECHILD\n"); return(-1);}
-		if(status == -1) { printf("test_connexion_anonyme() : ECHEC : status child\n"); return(-1); }
+		if(WIFEXITED(status) && WEXITSTATUS(status) != 0)
+			{ printf("test_connexion_anonyme() : ECHEC : status child\n"); return(-1); }
 	}
 	return 0;
 }
@@ -357,7 +438,7 @@ int test_destruction(){
 		// Le pere attend que l'enfant ait termine et verifie sa valeur de retour
 		int status;
 		if(wait(&status) == -1 && errno != ECHILD) { printf("test_destruction() : ECHEC : wait ECHILD\n"); return(-1);}
-		if(status == -1) { printf("test_destruction() : ECHEC : status child\n"); return(-1); }
+		if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_destruction() : ECHEC : status child\n"); return(-1); }
 
 		// Tentative de connexion apres destruction (doit echouer)
 		if(m_connexion(name, O_WRONLY) != NULL){
@@ -420,8 +501,6 @@ int test_envoi(MESSAGE* file){
 	size_t msg_size = sizeof( struct mon_message ) + sizeof( t ) ;
 	struct mon_message *m = malloc(msg_size);
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
-
-	m->type = (long) getpid();
 	memmove( m->mtext, t, sizeof( t ));
 
 	// Test : envoi en mode non bloquant AVEC de la place
@@ -690,8 +769,6 @@ int test_compact_messages(){
 
 	struct mon_message *m = malloc(sizeof(struct mon_message) + sizeof(u));
 	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
-
-	m->type = (long) getpid();
 	memmove( m->mtext, u, sizeof(u));
 
 	// Nombre de petits messages pouvant etre stockes dans la file
@@ -770,7 +847,7 @@ int test_processus_paralleles(int msg_nb){
 	int status;
 	while(wait(&status) > 0)
 		if(status == -1) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
-	if(status == -1) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
+	if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_processus_paralleles() : ECHEC : status child\n"); return(-1); }
 	if(errno != ECHILD) { printf("test_processus_paralleles() : ECHEC : wait ECHILD\n"); return(-1);}
 
 	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
