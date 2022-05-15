@@ -1,7 +1,5 @@
 #include "m_file.h"
 
-// <>
-
 MESSAGE *m_connexion(const char *nom, int options, ...){
 	MESSAGE *msg = malloc(sizeof(MESSAGE));
 	line *addr = NULL;

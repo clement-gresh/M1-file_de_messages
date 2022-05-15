@@ -1,13 +1,6 @@
 #include "project-tests.h"
 
-// <>
-
 int t[4] = {-12, 99, 134, 543};
-
-// Faire la fonction tout_a_gauche_defragmentation
-
-// Envoie puis recoit des messages petits pour verifier qu'on peut envoyer plus que nb_msg (memoire compacte)
-// puis envoie des messages plus gros : verifier que la fonction fct_met_tout_a_gauche fonctionne
 
 int main(int argc, const char * argv[]) {
 	printf("\n");
@@ -41,7 +34,7 @@ int main(int argc, const char * argv[]) {
 	if(m_deconnexion(file) != 0){ perror("main : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 	if(m_deconnexion(file2) != 0){ perror("main : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
-	// Teste la gestion de envoi et reception sur des processus en parallele
+	// Teste la gestion de l'envoi et de la reception sur la meme file par des processus en parallele
 	for(int i = 0; i < 10; i++){ test_processus_paralleles(500); }
 	printf("\n");
 
@@ -86,7 +79,7 @@ int index_check(MESSAGE* file, char text[], int first_free, int last_free, int f
 	return 0;
 }
 
-// Verifie que les 2 valeurs sont egales et renvoie une erreur sinon
+// Verifie que les 2 valeurs donnees en parametre sont egales
 int value_check(MESSAGE* file, char text[], long target_value, long actual_value){
 	if( actual_value != target_value ){
 		printf("%s\n", text);
@@ -144,6 +137,8 @@ int memory_check(MESSAGE* file, int msg_nb, size_t max_length){
 	return 0;
 }
 
+// Envoie un certain nombre de messages sur une file en mode bloquand ou non
+// et verifie la coherence des donnees dans la file (offset, index, etc.).
 int envois_repetes(MESSAGE* file, int msg_nb, size_t msg_size, mon_message *m, int flag){
 	size_t free_memory = file->memory_size - sizeof(header);
 
@@ -275,7 +270,8 @@ int test_connexion_anonyme(){
 	return 0;
 }
 
-//  Teste la connexion en O_CREAT | O_EXCL
+
+//  Teste la connexion en O_CREAT | O_EXCL (le 1er test doit reussir, le second echouer)
 int test_connexion_excl(){
 	char name[] = "/cecinestpasunnom2";
 	int msg_nb = 12;
@@ -296,7 +292,8 @@ int test_connexion_excl(){
 }
 
 
-// DECONNEXION
+// DECONNEXION & DESTRUCTION
+// Teste la deconnexion d'une file
 int test_deconnexion(){
 	char name[] = "/NONO";
 	int msg_nb = 12;
@@ -340,6 +337,8 @@ int test_deconnexion(){
 	return 0;
 }
 
+// Teste la destruction d'une file, l'impossibilite de s'y reconnecter et la possibilite de continuer a
+// envoyer des messages dessus
 int test_destruction(){
 	char name[] = "/NONO";
 	int msg_nb = 12;
@@ -548,7 +547,7 @@ int test_reception(MESSAGE* file){
 // Lit d'abord le message 1004 (type = 1004), puis 968 (type = -970)
 // Puis lit dans l'ordre les cases suivantes a partir de 992
 // Exception : le 5eme essai utilise type = -2 et donc echoue (la case 1016 n'est donc pas lue)
-// A la fin les cases qui sont toujours occupees sont les cases 0 (1001), 1 (998), 4 (1016)
+// A la fin, les cases qui sont toujours occupees sont les cases 0 (1001), 1 (998), 4 (1016)
 int test_receptions_multiples(MESSAGE* file, int msg_nb){
 	size_t size_msg = sizeof( struct mon_message ) + sizeof( t );
 	struct mon_message *m1 = malloc(size_msg);
@@ -603,7 +602,7 @@ int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int
 }
 
 
-// Teste la reception avec type negatif
+// Teste la reception avec type strictement negatif
 int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int msg_nb, int position1, int position2){
 	struct header *head = &file->shared_memory->head;
 	char *messages = file->shared_memory->messages;
@@ -741,12 +740,13 @@ int test_compact_messages(){
 	return 0;
 }
 
-// Fait m_reception sur 2 petits messages non consecutifs puis essaye d'envoyer un gros message (en mode bloquant)
+// Teste la defragmentation : lorsqu'il y a plusieurs cases libres trop petites pour acceuillir un message plus gros,
+// la defragmentation combine les cases vides pour recreer une case pouvant recevoir le message
 int test_defragmentation(MESSAGE* file, mon_message* small_m, int small_msg_nb, size_t small_msg_size){
 	int position1 = 2; // position of message with type 1004
 	int position2 = 5; // position of message with type 968
 
-	// Reception de 2 petits messages
+	// Reception de 2 petits messages non consecutifs (dans une file autrement pleine)
 	if(test_reception_type_pos(file, small_m, small_msg_size, small_msg_nb, position1) == -1) {return -1;}
 	if(test_reception_type_neg(file, small_m, small_msg_size, small_msg_nb, position1, position2) == -1) {return -1;}
 
@@ -754,7 +754,7 @@ int test_defragmentation(MESSAGE* file, mon_message* small_m, int small_msg_nb, 
 	if( big_m == NULL ){ perror("Function test malloc()"); exit(-1); }
 	memmove( big_m->mtext, t, sizeof(t));
 
-	// Envoi d'un gros message
+	// Envoi d'un gros message (entraine la defragmentation)
 	if(m_envoi( file, big_m, sizeof(t), 0) != 0)
 		{ printf("test_defragmentation() : ECHEC : envoie gros message.\n"); return -1; }
 

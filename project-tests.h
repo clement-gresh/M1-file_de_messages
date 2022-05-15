@@ -1,9 +1,10 @@
 #ifndef PROJECT_TESTS_H_
 #define PROJECT_TESTS_H_
 
+#include "m_file.h"
+
 #include <math.h>
 
-#include "m_file.h"
 
 // FONCTIONS DE TEST
 // Verifications
