@@ -4,7 +4,93 @@
 
 // debug : maj des LC des cases libres et occupees sont symetriques. Peut probablement les factoriser dans une seule fonction
 
-int enough_space(MESSAGE *file, size_t len){
+bool is_memory_lost(MESSAGE *file, size_t len){
+	char *messages = file->shared_memory->messages;
+	struct header *head = &file->shared_memory->head;
+
+	int available_memory = file->memory_size - sizeof(header);
+
+	// Calcule la place prise par les cases occupees
+	int current = head->first_occupied;
+
+	if(current != -1){
+		while(true){
+			available_memory = available_memory - sizeof(mon_message) - ((mon_message *)&messages[current])->length;
+
+			// Passe a la case occupee suivante s'il y en a une
+			if(((mon_message *)&messages[current])->offset != 0){
+				current = current + ((mon_message *)&messages[current])->offset;
+			}
+			else{ break; }
+		}
+	}
+	if(available_memory - sizeof(mon_message) >= len){ return true; }
+	else{ return false; }
+}
+
+int defragmentation(MESSAGE *file, size_t len){
+	char *messages = file->shared_memory->messages;
+	struct header *head = &file->shared_memory->head;
+
+	// debug : si les unlock des mutex sont faits tot pour favoriser le parallelisme, il faut attendre avant de
+	// defragementer afin que toutes les operations sur la memoire partage se terminent d'abord
+	// sleep(3);
+	if(is_memory_lost(file, len)){
+		int pos_messages = head->first_occupied;
+		int pos_buffer = 0;
+		int offset;
+		size_t length;
+		size_t free_memory = file->memory_size - sizeof( header ) - sizeof(mon_message);
+
+		if(pos_messages != -1){
+			// Cree un buffer pour stocker les cases occupees (avant de les recopier dans la file)
+			char *buffer = malloc(free_memory);
+			if( buffer == NULL ){ perror("Function test malloc()"); exit(-1); }
+
+			head->first_occupied = 0;
+
+			while(true){
+				length = ((mon_message *)&messages[pos_messages])->length;
+				offset = ((mon_message *)&messages[pos_messages])->offset;
+				free_memory = free_memory - sizeof(mon_message) - length;
+
+				memmove( buffer + pos_buffer, messages + pos_messages, sizeof(mon_message) + length);
+
+				// Passe a la case occupee suivante s'il y en a une
+				if(offset != 0){
+					((mon_message *)&buffer[pos_buffer])->offset = sizeof(mon_message) + length;
+					pos_messages = pos_messages + offset;
+				}
+				else{
+					((mon_message *)&buffer[pos_buffer])->offset = 0;
+					head->last_occupied = pos_buffer;
+					break;
+				}
+				pos_buffer = pos_buffer + sizeof(mon_message) + length;
+			}
+			// Met a jour la seule case vide de la file
+			head->first_free = pos_buffer;
+			head->last_free = pos_buffer;
+			((mon_message *)&buffer[pos_buffer])->length = free_memory;
+			((mon_message *)&buffer[pos_buffer])->offset = 0;
+
+			// Recopie dans le tableau de messages les donnees mises dans le buffer
+			memmove( messages, buffer, file->memory_size - sizeof(header));
+			free(buffer);
+		}
+		else {
+			head->first_free = 0;
+			head->last_free = 0;
+			((mon_message *)&messages[pos_messages])->offset = 0;
+			((mon_message *)&messages[pos_messages])->length = free_memory;
+		}
+
+		// free
+	}
+	return 0;
+}
+
+int free_cell(MESSAGE *file, size_t len){
 	char *messages = file->shared_memory->messages;
 	struct header *head = &file->shared_memory->head;
 	int count = 0;
@@ -23,6 +109,11 @@ int enough_space(MESSAGE *file, size_t len){
 		}
 		// Sinon aligne tous les messages a gauche (si ca n'a pas deja ete fait)
 		else if(count == 0){
+
+
+
+
+
 			//debug : fct_met_tout_a_gauche
 			count = count + 1;
 		}
@@ -50,7 +141,8 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	m_envoi_libres(file, current, len);
 
 	// Unlock le mutex
-	//if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); } // debug
+	// debug : unlock ici pour parallelisme
+	//if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 
 	// Signale un processus attendant de pouvoir envoyer
 	if(pthread_cond_signal(&head->wcond) > 0){perror("signal wcond"); exit(-1);}
@@ -72,9 +164,9 @@ int m_envoi(MESSAGE *file, const void *msg, size_t len, int msgflag){
 	// Signale un processus attendant de pouvoir recevoir
 	if(pthread_cond_signal(&head->rcond) > 0) {perror("signal rcond"); exit(-1); }
 
-	// DEBUG
-	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); } // debug
-	//FIN DEBUG
+	// Unlock le mutex
+	// debug : unlock ici pour eviter tout deadlock
+	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 
 	return 0;
 }
@@ -105,6 +197,7 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	m_reception_occupees(file, current);
 
 	// Unlock le mutex
+	// debug : unlock ici pour parallelisme
 	//if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
 
 	// Signale des processus attendant de pouvoir recevoir
@@ -125,9 +218,9 @@ ssize_t m_reception(MESSAGE *file, void *msg, size_t len, long type, int flags){
 	// Signale des processus attendant de pouvoir envoyer
 	if(pthread_cond_signal(&head->rcond) > 0){ perror("signal wcond"); exit(-1); }
 
-	// DEBUG
+	// Unlock le mutex
+	// debug : unlock ici pour eviter tout deadlock
 	if(pthread_mutex_unlock(&head->mutex) != 0){ perror("UNlock mutex"); exit(-1); }
-	//FIN DEBUG
 
 	return msg_size;
 }
@@ -374,7 +467,7 @@ int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag){
 	struct header *head = &file->shared_memory->head;
 	int current;
 
-	while((current = enough_space(file, len)) == -1){
+	while((current = free_cell(file, len)) == -1){
 		if(msgflag == O_NONBLOCK) {
 			return my_error("Le tableau est plein (envoi en mode non bloquant).\n", file, 0, UNLOCK, 'b', EAGAIN);
 		}

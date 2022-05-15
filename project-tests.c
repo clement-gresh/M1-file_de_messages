@@ -47,7 +47,7 @@ int main(int argc, const char * argv[]) {
 	printf("\n");
 
 	// Teste l'enregistrement et l'envoi de signaux
-	test_signal(0); // type = 0
+	test_signal(0); // type = 0 (doit fonctionner)
 	test_signal(998); // type positif (doit fonctionner)
 	test_signal(-2000); // type negatif (doit fonctionner)
 	// test_signal(3); // type positif (doit echouer)
@@ -240,6 +240,7 @@ int test_connexion_existe(char name[]){
 	memmove( m->mtext, t, sizeof( t ));
 
 	if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_connexion_existe() : ECHEC : envoie message.\n"); return -1; }
+	free(m);
 
 	return 0;
 }
@@ -268,6 +269,7 @@ int test_connexion_anonyme(){
 		memmove( m->mtext, t, sizeof( t ));
 
 		if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_connexion_anonyme() : ECHEC : envoie message.\n"); _exit(-1); }
+		free(m);
 		_exit(0);
 	}
 	else{
@@ -378,6 +380,7 @@ int test_destruction(){
 			printf("test_destruction() : ECHEC de l'envoi d'un message apres destruction de la file.\n"); return -1;
 		}
 		if(m_deconnexion(file1) != 0){ perror("test_destruction : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+		free(m);
 	}
 
 	printf("test_destruction() : OK\n\n");
@@ -416,6 +419,7 @@ int test_envoi_erreurs(){
 	if(m_destruction(name3) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 3\n"); return(-1); }
 	if(m_deconnexion(file3) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 	if(m_deconnexion(file1) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+	free(m);
 
 	printf("test_envoi_erreurs() : OK\n\n");
 	return 0;
@@ -437,6 +441,7 @@ int test_envoi(MESSAGE* file){
 	int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
 	if(error_check("test_envoi() : ECHEC : gestion envoi dans un tableau plein (mode non bloquant).", i, EAGAIN) == -1)
 		{return -1;}
+	free(m);
 
 	printf("test_envoi() : OK\n\n");
 	return 0;
@@ -462,6 +467,7 @@ int test_envois_multiples(MESSAGE* file, int msg_nb){
 
 		if(error_check(text, i, EAGAIN) == -1) {return -1;}
 	}
+	free(m);
 
 	printf("test_envois_multiples() : OK\n\n");
 	return 0;
@@ -497,6 +503,7 @@ int test_reception_erreurs(){
 	// Destruction de la file
 	if(m_destruction(name) == -1) { printf("test_reception_erreurs() : ECHEC : destruction\n"); return(-1); }
 	if(m_deconnexion(file) != 0){ perror("test_reception_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+	free(m1);
 
 	printf("test_reception_erreurs() : OK\n\n");
 	return 0;
@@ -524,6 +531,7 @@ int test_reception(MESSAGE* file){
 	s = m_reception(file, m1, sizeof(t), 0, O_NONBLOCK);
 	if(error_check("test_reception() : ECHEC : gestion reception d'un tableau vide (mode non bloquant).", s, EAGAIN) == -1)
 		{return -1;}
+	free(m1);
 
 	printf("test_reception() : OK\n\n");
 	return 0;
@@ -557,6 +565,7 @@ int test_receptions_multiples(MESSAGE* file, int msg_nb){
 	// Verifie les index et offsets apres receptions multiples
 	if(test_receptions_multiples_fin(file, msg_nb, size_msg, position1, position2, position3) == -1)
 		{return -1;}
+	free(m1);
 
 	printf("test_receptions_multiples() : OK\n\n");
 	return 0;
@@ -717,6 +726,7 @@ int test_compact_messages(){
 	// Destruction de la file
 	if(m_destruction(name) == -1) { printf("test_compact_messages() : ECHEC : destruction\n"); return(-1); }
 	if(m_deconnexion(file) != 0){ perror("test_compact_messages : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+	free(m);
 
 	printf("test_compact_messages() : OK\n\n");
 	return 0;
@@ -781,6 +791,8 @@ int test_processus_paralleles(int msg_nb){
 	// Destruction de la file
 	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
 	if(m_deconnexion(file) != 0){ perror("test_processus_paralleles : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+	free(me);
+	free(mr);
 
 	printf("test_processus_paralleles() : OK\n");
 	return 0;
@@ -829,6 +841,7 @@ int test_signal(long type){
 			size_t s = m_reception(file, mb, sizeof(t), 0, 0);
 			if(reception_check(mb, "test_signal() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 1001) == -1)
 				{ _exit(-1); }
+			free(mb);
 			_exit(0);
 		}
 		else{
@@ -841,6 +854,7 @@ int test_signal(long type){
 
 			if(envois_repetes(file, 2, msg_size, ma, O_NONBLOCK) == -1)
 				{ printf(" test_signal()\n\n");  _exit(-1); }
+			free(ma);
 
 			// A attend que l'enfant B ait termine et verifie sa valeur de retour
 			int status;
@@ -859,6 +873,7 @@ int test_signal(long type){
 		size_t s = m_reception(file, m, sizeof(t), 0, 0);
 		if(reception_check(m, "test_signal() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 998) == -1)
 			{ return(-1); }
+		free(m);
 
 		// Remet le mask a sa valeur initiale
 		if(sigprocmask(SIG_SETMASK, &previous_set, NULL) < 0){ perror("Function sigprocmask()"); exit(-1); }
