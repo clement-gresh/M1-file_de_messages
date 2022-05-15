@@ -76,18 +76,27 @@ int anon_and_shared(const char *nom){
 // nom doit commencer par un unique /
 //size_t nb_msg, size_t len_max, mode_t mode
 
-void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
+int build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode){
 
-	msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message)); // debug : memory_size - sizeof(header)
+	// Creation de la memoire partagee avec shm_open
+	msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message));
 	msg->flag = options;
 	int fd;
-	if(nom==NULL){
-		fd = shm_open(" ", options, mode);
+	if(nom==NULL){ fd = shm_open(" ", options, mode); }
+	else{ fd = shm_open(nom, options, mode); }
+
+	// Gestion des erreurs de shm_open
+	if( fd == -1 && errno == EEXIST) {
+		printf("build_msg : La file existe deja et drapeau O_EXCL.\n");
+		return -1;
 	}
-	else{
-		fd = shm_open(nom, options, mode);
+	else if( fd == -1 && errno == ENOENT) {
+		printf("build_msg : La file n'existe pas et pas de drapeau O_CREAT.\n");
+		return -1;
 	}
-	if( fd == -1 ){ perror("shm_open"); exit(1);}
+	else if( fd == -1 ){ perror("shm_open"); exit(1);}
+
+	// projection avec ftruncate et mmap
 	if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
 	struct stat bufStat;
 	fstat(fd, &bufStat);
@@ -97,11 +106,9 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 	int map_flag = anon_and_shared(nom);
 	addr = mmap(NULL, bufStat.st_size, prot, map_flag, fd, 0);
 
-	if( (void*) addr == MAP_FAILED) {
-		perror("Function mmap()");
-		exit(EXIT_FAILURE);
-	}
+	if( (void*) addr == MAP_FAILED) { perror("Function mmap()"); exit(EXIT_FAILURE); }
 
+	// Initialisation de la memoire partagee
 	msg->shared_memory = addr;
 	msg->shared_memory->head.max_length_message = len_max;
 	msg->shared_memory->head.pipe_capacity = nb_msg;
@@ -110,7 +117,7 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 	msg->shared_memory->head.first_free = 0;
 	msg->shared_memory->head.last_free = 0;
 
-	// La place disponible pour le premier message
+	// Au debut, il y a une unique case libre de la taille du tableau de messages (aucune case occupee)
 	((mon_message *)&msg->shared_memory->messages[0])->length = msg->memory_size - sizeof(header) - sizeof(mon_message);
 	((mon_message *)&msg->shared_memory->messages[0])->offset = 0;
 
@@ -126,7 +133,7 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 		msg->shared_memory->head.types_searched[i].number = 0;
 		msg->shared_memory->head.types_searched[i].type = 0;
 	}
-
+	return 0;
 }
 
 int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
@@ -134,8 +141,8 @@ int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
 	if(is_o_wronly(options)){ options = O_RDWR; }
 
 	int fd = shm_open(nom, options, 0);
-	if( fd == -1 && errno == EEXIST) { printf("La file existe deja et drapeau O_EXCL.\n"); return -1; }
-	if( fd == -1 && errno == ENOENT) { printf("La file n'existe pas et pas de drapeau O_CREAT.\n"); return -1; }
+	if( fd == -1 && errno == EEXIST) { printf("connex_msg : La file existe deja et drapeau O_EXCL.\n"); return -1; }
+	else if( fd == -1 && errno == ENOENT) { printf("connex_msg : file n'existe pas et pas de drapeau O_CREAT.\n"); return -1; }
 	else if( fd == -1 ){ perror("shm_open dans connex_msg"); exit(EXIT_FAILURE); }
 
 	struct stat bufStat;
@@ -162,26 +169,30 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 	MESSAGE *msg = malloc(sizeof(MESSAGE));
 	line *addr = NULL;
 
-    if(is_o_creat(options)){ //il faut creer la file si elle n'existe pas
-		// on empeche de creer une file en lecture seule
-    	if(is_o_rdonly(options)){ return NULL; }
-
+	// Si l'appel se fait avec O_CREATE, on recupere les 3 parametres supplementaires
+    if(is_o_creat(options)){
     	va_list parametersInfos;
     	va_start(parametersInfos, options);
 
     	size_t nb_msg = va_arg(parametersInfos, size_t);
     	size_t len_max = va_arg(parametersInfos, size_t);
     	mode_t mode = va_arg(parametersInfos, mode_t);
+
+    	// Pour une file anonyme
 		if(nom==NULL){
 			build_msg(msg, addr, NULL, options, nb_msg, len_max, mode);
 		}
+		// Connexion si la file existe deja
     	else if(file_exists(nom)){
     		if(connex_msg(msg, addr, nom, options) == -1) { return NULL; }
-    	}else{
-	    	build_msg(msg, addr, nom, options, nb_msg, len_max, mode);
     	}
+		// Creation si la file n'existe pas
+    	else{
+    		// on empeche de creer une file en lecture seule
+        	if(is_o_rdonly(options)){ return NULL; }
 
-
+	    	if(build_msg(msg, addr, nom, options, nb_msg, len_max, mode) == -1) { return NULL; }
+    	}
 		va_end(parametersInfos);
     }
     else if(!is_o_creat(options) && nom != NULL){ // si la file existe

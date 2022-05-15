@@ -44,14 +44,14 @@ int main(int argc, const char * argv[]) {
 	// Teste la gestion de envoi et reception sur des processus en parallele
 	for(int i = 0; i < 10; i++){ test_processus_paralleles(500); }
 	printf("\n");
-
+	/*
 	// Teste l'enregistrement et l'envoi de signaux
 	test_signal(0); // type = 0 (doit fonctionner)
 	test_signal(998); // type positif (doit fonctionner)
 	test_signal(-2000); // type negatif (doit fonctionner)
 	// test_signal(3); // type positif (doit echouer, i.e. rester bloque)
 	// test_signal(-10); // type negatif (doit echouer, i.e. rester bloque)
-
+	*/
 	return EXIT_SUCCESS;
 }
 
@@ -188,11 +188,7 @@ int test_connexion(){
 	if(test_connexion_simple(name1) == -1) { return -1; } //test connexion simple en O_RDWR | O_CREAT
 	if(test_connexion_read_only() == -1) { return -1; } //test connexion simple en O_RDONLY | O_CREAT
 	if(test_connexion_existe(name1) == -1) { return -1; } // test connexion sur une file existante
-
-	// debug
 	if(test_connexion_anonyme() == -1) { return -1; } //tester la connexion a une file anonyme par un processus enfant
-
-	// debug
 	if(test_connexion_excl() == -1) { return -1; } // tester la connexion en O_CREAT | O_EXCL
 
 	printf("test_connexion() : OK\n\n");
@@ -281,19 +277,19 @@ int test_connexion_anonyme(){
 
 //  Teste la connexion en O_CREAT | O_EXCL
 int test_connexion_excl(){
-	char name[] = "/cecinestpasunnom";
+	char name[] = "/cecinestpasunnom2";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 
-	printf("avant connexion excl 1\n"); // debug
+	//printf("\n\n\navant connexion excl 1\n"); // debug
 	// Test creation de la file avec O_CREAT | O_EXCL (doit fonctionner)
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT | O_EXCL, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file == NULL){ printf("test_connexion_excl() : ECHEC : creation file avec O_EXCL\n"); return -1; }
 
-	printf("apres connexion excl 1\n"); // debug
+	//printf("apres connexion excl 1\n"); // debug
 	// Test connexion a une file existante avec O_CREAT | O_EXCL (doit echouer)
 	MESSAGE* file2 = m_connexion(name, O_RDWR | O_CREAT | O_EXCL, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
-	if(file2 != NULL){ printf("test_connexion_excl() : ECHEC : connexion file existante avec O_EXCL\n"); return -1; }
+	if(file2 != NULL){ printf("test_connexion_excl() : ECHEC : connexion file existante avec O_EXCL\n\n"); return -1; }
 
 	if(m_destruction(name) != 0){ perror("test_connexion_excl : ECHEC : m_destruction()\n"); return -1; }
 	if(m_deconnexion(file) != 0){ perror("test_connexion_excl : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
@@ -308,17 +304,31 @@ int test_deconnexion(){
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 	MESSAGE* file1 = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
-	MESSAGE* file2 = m_connexion(name, O_RDONLY); // debug : ajouter O_CREAT
-	MESSAGE* file3 = m_connexion(name, O_WRONLY);
+	if(file1 == NULL){ printf("test_deconnexion() : ECHEC : creation file1\n"); return -1; }
+
+	MESSAGE* file2 = m_connexion(name, O_WRONLY);
+	if(file2 == NULL){ printf("test_deconnexion() : ECHEC : creation file2\n"); return -1; }
+
+	printf("AVANT connexion file3\n"); //debug
+	MESSAGE* file3 = m_connexion(name, O_RDONLY);
+	//MESSAGE* file3 = m_connexion(name, O_RDONLY | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
+	//if(file3 == NULL){ printf("test_deconnexion() : ECHEC : creation file3\n"); return -1; }
+
+
+	printf("file3 pipe capacity : %d\n", file3->shared_memory->head.pipe_capacity); //debug
 
 	// Deconnexion sur file2
+	printf("AVANT deconnexion file2\n"); //debug
 	if(m_deconnexion(file2) != 0){ perror("test_deconnexion : ECHEC : m_deconnexion(file2) != 0\n"); return -1; }
 
+	printf("AVANT test file2\n"); //debug
 	// Teste que file2 n'est plus utilisable mais file1 et file3 le sont toujours
 	if((void*)file2->shared_memory != NULL){
 		perror("test_deconnexion : ECHEC : file2->shared_memory != NULL\n");
 		return -1;
 	}
+
+	printf("AVANT test file1-3\n"); //debug
 	if((void*)file1->shared_memory == NULL){
 		perror("test_deconnexion : ECHEC : file1->shared_memory == NULL\n");
 		return -1;
@@ -790,11 +800,9 @@ int test_processus_paralleles(int msg_nb){
 
 	// structure pour recevoir un message
 	struct mon_message *mr = malloc(size_msg);
-	char name[] = "/processus_paralleles";
 
 	// Creation de la file
-	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
-	// debug : mettre une file anonyme
+	MESSAGE* file = m_connexion(NULL, O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 
 	// Le pere cree un fils A
 	pid_t pidA = fork();
@@ -833,7 +841,6 @@ int test_processus_paralleles(int msg_nb){
 	if(errno != ECHILD) { printf("test_processus_paralleles() : ECHEC : wait ECHILD\n"); return(-1);}
 
 	// Destruction de la file
-	if(m_destruction(name) == -1) { printf("test_processus_paralleles() : ECHEC : destruction\n"); return(-1); }
 	if(m_deconnexion(file) != 0){ perror("test_processus_paralleles : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 	free(me);
 	free(mr);
