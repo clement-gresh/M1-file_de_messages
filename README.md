@@ -1,11 +1,17 @@
-Projet Programation Systèmes Avances
+Projet Programation Systemes Avances
 ====
 
-| Nom      | Prénom   | M1           | n° etudiant |
+| Nom      | Prenom   | M1           | n etudiant  |
 |----------|----------|--------------|-------------|
-| GRESH    | Clément  | IMPAIRS      | 22123274    |
+| GRESH    | Clement  | IMPAIRS      | 22123274    |
 | LIGNIER  | Hugo     | MATHS-INFO   |             |
 
 
 Universite de Paris
 2021-2022
+
+Pour compiler le projet : make all
+Pour lancer les tests : make test
+Pour nettoyer : make clean
+
+Pour nettoyer + recompiler + lancer les tests : make launch

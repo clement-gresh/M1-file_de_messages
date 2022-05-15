@@ -1,4 +1,4 @@
-CPP=gcc # g++ ?
+CPP=gcc
 CFLAGS= -Wall -std=gnu11 -g -pedantic 
 LDLIBS = -pthread
 LIBS = -lrt -lm
@@ -6,21 +6,14 @@ LIBS = -lrt -lm
 
 all : project-tests
 
-project-tests : project-tests.o functions-clem.o  functions-hugo.c
+project-tests : project-tests.o m_file.o
 	$(CPP) $(CFLAGS) $(LDLIBS) -o $@ $^ $(LIBS)
 
 project-tests.o : project-tests.c
 	$(CPP) $(CFLAGS) -c $<
 
-
-functions-clem.o : functions-clem.c
+m_file.o : m_file.c
 	$(CPP) $(CFLAGS) -c $<
-
-
-functions-hugo.o : functions-hugo.c
-	$(CPP) $(CFLAGS) -c $<
-	
-
 
 clean :
 	rm *.o
