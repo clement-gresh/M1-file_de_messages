@@ -187,13 +187,13 @@ int test_connexion(){
 	char name1[] = "/nonono";
 	if(test_connexion_simple(name1) == -1) { return -1; } //test connexion simple en O_RDWR | O_CREAT
 	if(test_connexion_read_only() == -1) { return -1; } //test connexion simple en O_RDONLY | O_CREAT
-	// if(test_connexion_existe(name1) == -1) { return -1; } // test connexion sur une file existante
+	if(test_connexion_existe(name1) == -1) { return -1; } // test connexion sur une file existante
 
 	// debug
-	// if(test_connexion_anonyme() == -1) { return -1; } //tester la connexion a une file anonyme par un processus enfant
+	if(test_connexion_anonyme() == -1) { return -1; } //tester la connexion a une file anonyme par un processus enfant
 
 	// debug
-	//if(test_connexion_excl() == -1) { return -1; } // tester la connexion en O_CREAT | O_EXCL
+	if(test_connexion_excl() == -1) { return -1; } // tester la connexion en O_CREAT | O_EXCL
 
 	printf("test_connexion() : OK\n\n");
 	return 0;
@@ -229,7 +229,7 @@ int test_connexion_read_only(){
 // Teste la connexion a une file existante
 int test_connexion_existe(char name[]){
 	// Teste m_connexion sur une file existante (doit fonctionner)
-	MESSAGE* file = m_connexion(name, O_RDONLY | O_CREAT);
+	MESSAGE* file = m_connexion(name, O_RDWR);
 	if(file == NULL){ printf("test_connexion_existe() : ECHEC : connexion a file existante\n"); return -1; }
 
 	// Teste envoi d'un message sur la file (doit fonctionner)
@@ -248,11 +248,9 @@ int test_connexion_existe(char name[]){
 int test_connexion_anonyme(){
 	int msg_nb = 12;
 	size_t max_length = sizeof(char)*20;
-
 	// Teste la creation de la file
 	MESSAGE* file = m_connexion(NULL, O_RDWR | O_CREAT, msg_nb, max_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file == NULL){ printf("test_connexion_anonyme() : ECHEC : file NULL\n"); return -1; }
-
 	// Verification des attributs de la file
 	if( memory_check(file, msg_nb, max_length) == -1) { return -1; }
 

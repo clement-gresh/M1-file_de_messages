@@ -80,8 +80,13 @@ void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb
 
 	msg->memory_size = sizeof(header) + nb_msg * (len_max * sizeof(char) + sizeof(mon_message)); // debug : memory_size - sizeof(header)
 	msg->flag = options;
-
-	int fd = shm_open(nom, options, mode);
+	int fd;
+	if(nom==NULL){
+		fd = shm_open(" ", options, mode);
+	}
+	else{
+		fd = shm_open(nom, options, mode);
+	}
 	if( fd == -1 ){ perror("shm_open"); exit(1);}
 	if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
 	struct stat bufStat;
@@ -154,12 +159,10 @@ int file_exists (const char * f){
 }
 
 MESSAGE *m_connexion(const char *nom, int options, ...){
-
 	MESSAGE *msg = malloc(sizeof(MESSAGE));
 	line *addr = NULL;
 
     if(is_o_creat(options)){ //il faut creer la file si elle n'existe pas
-
 		// on empeche de creer une file en lecture seule
     	if(is_o_rdonly(options)){ return NULL; }
 
@@ -169,8 +172,10 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
     	size_t nb_msg = va_arg(parametersInfos, size_t);
     	size_t len_max = va_arg(parametersInfos, size_t);
     	mode_t mode = va_arg(parametersInfos, mode_t);
-		
-    	if(file_exists(nom)){
+		if(nom==NULL){
+			build_msg(msg, addr, NULL, options, nb_msg, len_max, mode);
+		}
+    	else if(file_exists(nom)){
     		if(connex_msg(msg, addr, nom, options) == -1) { return NULL; }
     	}else{
 	    	build_msg(msg, addr, nom, options, nb_msg, len_max, mode);
