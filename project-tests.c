@@ -18,7 +18,7 @@ int main(int argc, const char * argv[]) {
 	test_destruction();
 
 	// Teste l'envoi et la reception
-	char name1[] = "/envoi";
+	char name1[] = "/envoi1";
 	MESSAGE* file = m_connexion(name1, O_RDWR | O_CREAT, 1, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envoi(file);
 	test_reception(file);
@@ -28,25 +28,30 @@ int main(int argc, const char * argv[]) {
 	test_reception_erreurs();
 
 	// Teste l'envoi et la reception de multiples messages
-	char name2[] = "/tests_multiples";
+	char name2[] = "/tests_multiples1";
 	int msg_nb = 20; // msg_nb doit etre superieur a 7 pour les tests
 	MESSAGE* file2 = m_connexion(name2, O_RDWR | O_CREAT, msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 	test_envois_multiples(file2, msg_nb);
 	test_receptions_multiples(file2, msg_nb);
 	test_compact_messages();
 
-	// Teste la gestion de envoi et reception sur des processus en parallele
-	for(int i = 0; i < 10; i++){ test_processus_paralleles(500); }
-	printf("\n");
-
-	// Teste l'enregistrement et l'envoi de signaux
-	test_signal();
-
 	// Destruction des files
 	if(m_destruction(name1) == -1) { printf("main() : ECHEC : destruction 1\n"); return(-1); }
 	if(m_destruction(name2) == -1) { printf("main() : ECHEC : destruction 2\n"); return(-1); }
 	if(m_deconnexion(file) != 0){ perror("main : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 	if(m_deconnexion(file2) != 0){ perror("main : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+
+
+	// Teste la gestion de envoi et reception sur des processus en parallele
+	for(int i = 0; i < 10; i++){ test_processus_paralleles(500); }
+	printf("\n");
+
+	// Teste l'enregistrement et l'envoi de signaux
+	test_signal(0); // type = 0
+	test_signal(998); // type positif (doit fonctionner)
+	test_signal(-2000); // type negatif (doit fonctionner)
+	// test_signal(3); // type positif (doit echouer)
+	// test_signal(-10); // type negatif (doit echouer)
 
 	return EXIT_SUCCESS;
 }
@@ -785,7 +790,7 @@ int test_processus_paralleles(int msg_nb){
 // Teste l'envoi d'un signal a un processus s'etant enregistre sur la file via m_enregistrement
 void handler1(int sig) {}
 
-int test_signal(){
+int test_signal(long type){
 	// Creation de la file
 	char name1[] = "/test_signal_27";
 	size_t msg_size = sizeof( struct mon_message ) + sizeof( t ) ;
@@ -805,7 +810,7 @@ int test_signal(){
 	if(sigprocmask(SIG_SETMASK, &block_set, &previous_set) < 0){ perror("Function sigprocmask()"); exit(-1); }
 
 	// Enregistre le processus sur la file d'attente de la file
-	if(m_enregistrement(file, 0, SIGUSR1) == -1) { printf("test_signal() : ECHEC : m_enregistrement.\n"); return(-1); }
+	if(m_enregistrement(file, type, SIGUSR1) == -1) { printf("test_signal() : ECHEC : m_enregistrement.\n"); return(-1); }
 
 	// Creation d'un fils A
 	pid_t pidA = fork();
@@ -828,7 +833,7 @@ int test_signal(){
 		}
 		else{
 			// Le fils A envoie 2 messages dans la file
-			sleep(0.2); // sleep pour assurer que B est deja en attente sur la file
+			sleep(1); // sleep pour assurer que B est deja en attente sur la file
 
 			struct mon_message *ma = malloc(msg_size);
 			if( ma == NULL ){ perror("Function test malloc()"); exit(-1); }
@@ -864,6 +869,7 @@ int test_signal(){
 		if(WIFEXITED(status) && WEXITSTATUS(status) != 0) { printf("test_signal() : ECHEC : status child\n"); return(-1); }
 	}
 
+	// Destruction de la file
 	if(m_destruction(name1) == -1) { printf("test_signal() : ECHEC : destruction\n"); return(-1); }
 	if(m_deconnexion(file) != 0){ perror("test_signal : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 

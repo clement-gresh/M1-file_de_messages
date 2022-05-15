@@ -53,6 +53,6 @@ int test_processus_paralleles(int msg_nb);
 
 // Notifications
 void handler1(int sig);
-int test_signal();
+int test_signal(long type);
 
 #endif /* PROJECT_TESTS_H_ */

@@ -217,7 +217,7 @@ void m_signal(MESSAGE *file){
 	for(int i = 0; i < RECORD_NB; i++){
 		// Recherche si un processus est enregistre pour ce type de message
 		if(head->records[i].pid != -1){
-			bool can_signal = true;
+			bool proc_waiting = false;
 			int k = 0;
 
 			// Verifie qu'il n'y a aucun pocessus suspendu en attente de ce message
@@ -227,18 +227,51 @@ void m_signal(MESSAGE *file){
 						|| head->types_searched[k].type == head->records[i].type
 						|| -head->types_searched[k].type > head->records[i].type))
 				{
-					can_signal = false;
+					proc_waiting = true;
 					break;
 				}
 				k++;
 			}
-			// Envoie le signal au processus si les conditions sont verifies
-			if(can_signal){
-				kill(head->records[i].pid, head->records[i].signal);
-				head->records[i].pid = -1;
+			if(!proc_waiting){
+				// Verifie s'il y a un message correspondant a 'type' dans la file
+				if(is_type_available(file, head->records[i].type) != -1){
+
+					// Envoie le signal au processus si les conditions sont verifies
+					kill(head->records[i].pid, head->records[i].signal);
+					head->records[i].pid = -1;
+				}
 			}
 		}
 	}
+}
+
+// Determine si un message correspondant au type voulu est disponible dans la liste chainee des cases occupees
+// Retourne la position du message si c'est le cas, -1 sinon
+int is_type_available(MESSAGE *file, long type){
+	char *messages = file->shared_memory->messages;
+	struct header *head = &file->shared_memory->head;
+
+	int current = head->first_occupied;
+
+	// Verifie s'il y a un message correspondant a 'type' dans la file
+	if(type==0 && current != -1){
+		return current;
+	}
+	else if(type != 0 && current != -1){
+		while(true){
+			if((type>0 && ((mon_message *)&messages[current])->type == type)
+					|| (type<0 && ((mon_message *)&messages[current])->type <= -type)){
+				return current;
+			}
+			else if(current == head->last_occupied){
+				return -1;
+			}
+			else{
+				current = current + ((mon_message *)&messages[current])->offset;
+			}
+		}
+	}
+	return -1;
 }
 
 
@@ -424,42 +457,21 @@ void m_reception_libres(MESSAGE *file, int current){
 
 // Recherche d'un message a lire et attente si besoin (ou exit en mode non-bloquant)
 int m_reception_recherche(MESSAGE *file, long type, int flags){
-	char *messages = file->shared_memory->messages;
 	struct header *head = &file->shared_memory->head;
-
-	int current;
-	bool msg_to_read = false;
+	int current = -1;
 	bool wait = false;
 	int position;
 
-	while(!msg_to_read){
-		current = head->first_occupied;
-
+	while(current == -1){
 		// Verifie s'il y a un message correspondant a 'type' dans la file
-		if(type==0 && current != -1){
-			msg_to_read = true;
-		}
-		else if(type != 0 && current != -1){
-			while(true){
-				if((type>0 && ((mon_message *)&messages[current])->type == type)
-						|| (type<0 && ((mon_message *)&messages[current])->type <= -type)){
-					msg_to_read = true;
-					break;
-				}
-				else if(current == head->last_occupied){
-					break;
-				}
-				else{
-					current = current + ((mon_message *)&messages[current])->offset;
-				}
-			}
-		}
+		current = is_type_available(file, type);
+
 		// Exit si pas de message et mode non bloquant
-		if(flags == O_NONBLOCK && !msg_to_read){
+		if(flags == O_NONBLOCK && current == -1){
 			return my_error("Pas de message \'type\' (mode non bloquant).\n", file, type, UNLOCK, 'b', EAGAIN);
 		}
 		// Attente si pas de message et mode bloquant (et signal la condition rcond)
-		else if(!msg_to_read){
+		else if(current == -1){
 
 			// Si c'est la premiere fois que le processus fait wait, il indique d'abord le type de message qu'il recherche
 			// dans la liste types_searched

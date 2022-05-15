@@ -92,16 +92,23 @@ void m_annulation(MESSAGE *file);									// Notifications
 int initialiser_mutex(pthread_mutex_t *pmutex);
 int initialiser_cond(pthread_cond_t *pcond);
 int my_error(char *txt, MESSAGE *file, long type, bool unlock, char signal, int error);
+int is_type_available(MESSAGE *file, long type);
 void m_signal(MESSAGE *file);
+
+// M_ENVOI
 int m_envoi_erreurs(MESSAGE *file, size_t len, int msgflag);
 void m_envoi_libres(MESSAGE *file, int current, size_t len);
 void m_envoi_occupees(MESSAGE *file, int current);
 int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag);
+
+// M_RECEPTION
 int m_reception_erreurs(MESSAGE *file, int flags);
 void m_reception_occupees(MESSAGE *file, int current);
 void m_reception_libres(MESSAGE *file, int current);
 int m_reception_recherche(MESSAGE *file, long type, int flags);
 int m_reception_type_searched(MESSAGE *file, long type);
+
+// M_CONNEXION
 int is_o_creat(int options);
 int is_o_rdonly(int options);
 int is_o_wronly(int options);
