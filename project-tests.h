@@ -47,6 +47,7 @@ int test_receptions_multiples_fin(MESSAGE* file, int msg_nb, size_t size_msg,
 
 // Messages compactes
 int test_compact_messages();
+int test_defragmentation(MESSAGE* file, mon_message* small_m, int small_msg_nb, size_t small_msg_size);
 
 // Parallelisme
 int test_processus_paralleles(int msg_nb);

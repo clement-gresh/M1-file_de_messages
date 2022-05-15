@@ -93,13 +93,13 @@ int initialiser_mutex(pthread_mutex_t *pmutex);
 int initialiser_cond(pthread_cond_t *pcond);
 int my_error(char *txt, MESSAGE *file, long type, bool unlock, char signal, int error);
 int is_type_available(MESSAGE *file, long type);
-void m_signal(MESSAGE *file);
 
 // M_ENVOI
 int m_envoi_erreurs(MESSAGE *file, size_t len, int msgflag);
 void m_envoi_libres(MESSAGE *file, int current, size_t len);
 void m_envoi_occupees(MESSAGE *file, int current);
 int m_envoi_recherche(MESSAGE *file, size_t len, int msgflag);
+int search_free_cell(MESSAGE *file, size_t len);
 
 // M_RECEPTION
 int m_reception_erreurs(MESSAGE *file, int flags);
@@ -120,5 +120,12 @@ int BitAt(long unsigned int x, int i);
 int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options);
 void build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb_msg, size_t len_max, mode_t mode);
 int file_exists (const char * f);
+
+// MESSAGES COMPACTS
+bool defragmentation(MESSAGE *file, size_t len);
+bool is_memory_lost(MESSAGE *file, size_t len);
+
+// NOTIFICATIONS
+void m_signal(MESSAGE *file);
 
 #endif /* M_FILE_H_ */

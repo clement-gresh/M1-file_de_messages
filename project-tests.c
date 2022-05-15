@@ -41,7 +41,6 @@ int main(int argc, const char * argv[]) {
 	if(m_deconnexion(file) != 0){ perror("main : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 	if(m_deconnexion(file2) != 0){ perror("main : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
-
 	// Teste la gestion de envoi et reception sur des processus en parallele
 	for(int i = 0; i < 10; i++){ test_processus_paralleles(500); }
 	printf("\n");
@@ -50,8 +49,8 @@ int main(int argc, const char * argv[]) {
 	test_signal(0); // type = 0 (doit fonctionner)
 	test_signal(998); // type positif (doit fonctionner)
 	test_signal(-2000); // type negatif (doit fonctionner)
-	// test_signal(3); // type positif (doit echouer)
-	// test_signal(-10); // type negatif (doit echouer)
+	// test_signal(3); // type positif (doit echouer, i.e. rester bloque)
+	// test_signal(-10); // type negatif (doit echouer, i.e. rester bloque)
 
 	return EXIT_SUCCESS;
 }
@@ -581,7 +580,7 @@ int test_reception_type_pos(MESSAGE* file, mon_message *m1, size_t size_msg, int
 
 	// Verifie les donnees du message
 	char text0[] = "test_reception_type_pos() : ECHEC : reception avec valeur specifique de type.";
-	if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], 1004) == -1)
+	if(reception_check(m1, text0, s, size_msg - sizeof(mon_message), size_msg - sizeof(mon_message), t[2], 1004) == -1)
 		{return -1;}
 
 	// Verifie les valeurs des index
@@ -607,7 +606,8 @@ int test_reception_type_neg(MESSAGE* file, mon_message *m1, size_t size_msg, int
 
 	// Verifie les donnees du message
 	char text0[] = "test_reception_type_neg() : ECHEC : reception avec valeur negative de type.";
-	if(reception_check(m1, text0, s, sizeof(t), sizeof(t), t[2], 968) == -1) {return -1;}
+	if(reception_check(m1, text0, s, size_msg - sizeof(mon_message), size_msg - sizeof(mon_message), t[2], 968) == -1)
+		{return -1;}
 
 	// Verifie les valeurs des index
 	char text[] = "test_reception_type_neg() : ECHEC : indice apres reception 2eme message.";
@@ -703,32 +703,78 @@ int test_compact_messages(){
 	char name[] = "/test_compact";
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, big_msg_nb, sizeof(t), S_IRWXU | S_IRWXG | S_IRWXO);
 
-	struct mon_message *m = malloc(sizeof(struct mon_message) + sizeof(u));
-	if( m == NULL ){ perror("Function test malloc()"); exit(-1); }
-	memmove( m->mtext, u, sizeof(u));
+	struct mon_message *small_m = malloc(sizeof(struct mon_message) + sizeof(u));
+	if( small_m == NULL ){ perror("Function test malloc()"); exit(-1); }
+	memmove( small_m->mtext, u, sizeof(u));
 
 	// Nombre de petits messages pouvant etre stockes dans la file
 	int small_msg_nb = (int) floor(big_msg_size * big_msg_nb / small_msg_size);
 
 	// Test envoi du nombre maximal de petits messages (doit reussir)
-	if(envois_repetes(file, small_msg_nb, small_msg_size, m, O_NONBLOCK) == -1)
+	if(envois_repetes(file, small_msg_nb, small_msg_size, small_m, O_NONBLOCK) == -1)
 		{ printf(" test_compact_messages()\n\n"); return -1; }
 
 
 	// Test : envoi en mode non bloquant SANS place (doit echouer)
 	for(int j = 0; j < 2; j++){
-		int i = m_envoi( file, m, sizeof(t), O_NONBLOCK);
+		int i = m_envoi( file, small_m, sizeof(u), O_NONBLOCK);
 		char text[] = "test_compact_messages() : ECHEC : gestion envoi dans un tableau plein (mode non bloquant).";
 
 		if(error_check(text, i, EAGAIN) == -1) {return -1;}
 	}
 
+	// Test : defragmentation
+	test_defragmentation(file, small_m, small_msg_nb, small_msg_size);
+
 	// Destruction de la file
 	if(m_destruction(name) == -1) { printf("test_compact_messages() : ECHEC : destruction\n"); return(-1); }
 	if(m_deconnexion(file) != 0){ perror("test_compact_messages : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
-	free(m);
+	free(small_m);
 
 	printf("test_compact_messages() : OK\n\n");
+	return 0;
+}
+
+// Fait m_reception sur 2 petits messages non consecutifs puis essaye d'envoyer un gros message (en mode bloquant)
+int test_defragmentation(MESSAGE* file, mon_message* small_m, int small_msg_nb, size_t small_msg_size){
+	int position1 = 2; // position of message with type 1004
+	int position2 = 5; // position of message with type 968
+
+	// Reception de 2 petits messages
+	if(test_reception_type_pos(file, small_m, small_msg_size, small_msg_nb, position1) == -1) {return -1;}
+	if(test_reception_type_neg(file, small_m, small_msg_size, small_msg_nb, position1, position2) == -1) {return -1;}
+
+	struct mon_message *big_m = malloc(sizeof(struct mon_message) + sizeof(t));
+	if( big_m == NULL ){ perror("Function test malloc()"); exit(-1); }
+	memmove( big_m->mtext, t, sizeof(t));
+
+	// Envoi d'un gros message
+	if(m_envoi( file, big_m, sizeof(t), 0) != 0)
+		{ printf("test_defragmentation() : ECHEC : envoie gros message.\n"); return -1; }
+
+	// Verifie le nombre de messages dans la file
+	if(m_nb(file) != small_msg_nb - 1)
+		{ printf("test_defragmentation() : ECHEC : nombre de messages dans la file (gros message).\n"); return -1;}
+
+
+	// Verifie les valeurs des index tant que le tableau n'est pas plein
+	char text[] ="test_defragmentation() : ECHEC : indice apres envoi gros message.";
+	if(index_check(file, text, -1, -1, 0, small_msg_size * (small_msg_nb - 2)) == -1)
+		{ return -1; };
+
+	// Verifie les offsets dans la file
+	for(int j = 0; j < small_msg_nb - 1; j++){
+		if(j != small_msg_nb-2
+				&& offset_check(file, "test_defragmentation() : ECHEC : offset.", small_msg_size, j*small_msg_size) == -1)
+			{ return -1; }
+
+		else if(j == small_msg_nb-2
+				&& offset_check(file, "test_defragmentation ECHEC : offset dernier message.", 0, j*small_msg_size) == -1)
+			{ return -1; }
+	}
+	free(big_m);
+
+	printf("test_defragmentation() : OK\n\n");
 	return 0;
 }
 
