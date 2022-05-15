@@ -199,8 +199,10 @@ int test_connexion_simple(char name[]){
 	MESSAGE* file = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file == NULL){ printf("test_connexion_simple() : ECHEC : NULL\n"); return -1; }
 
+
 	// Verification des attributs de la file
 	if( memory_check(file, msg_nb, max_length) == -1) { return -1; }
+
 
 	return 0;
 }

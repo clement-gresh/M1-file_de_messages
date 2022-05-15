@@ -18,24 +18,18 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 			build_msg(msg, addr, NULL, options, nb_msg, len_max, mode);
 		}
 		// Connexion si la file existe deja
-    	else{
-    		int fd = shm_open(nom,options,mode);
-    		struct stat bufStat;
-			fstat(fd, &bufStat);
-
-			if(bufStat.st_size == 0){
-				// on empeche de creer une file en lecture seule
-        		if(is_o_rdonly(options)){ return NULL; }
-
-	    		if(build_msg(msg, addr, nom, options, nb_msg, len_max, mode) == -1) { return NULL; }
-			}
-			else{ 		// Creation si la file n'existe pas
-
-    			if(connex_msg(msg, addr, nom, options) == -1) { return NULL; }
-			}
-
+    	else if(file_exists(nom)){
+    		//printf("file existe deja\n"); // debug
+    		if(connex_msg(msg, addr, nom, options) == -1) { return NULL; }
     	}
+		// Creation si la file n'existe pas
+    	else{
+    		//printf("file n'existe pas\n"); // debug
+    		// on empeche de creer une file en lecture seule
+        	if(is_o_rdonly(options)){ return NULL; }
 
+	    	if(build_msg(msg, addr, nom, options, nb_msg, len_max, mode) == -1) { return NULL; }
+    	}
 		va_end(parametersInfos);
     }
     else if(!is_o_creat(options) && nom != NULL){ // si la file existe
@@ -313,7 +307,7 @@ int build_msg(MESSAGE* msg, line *addr, const char *nom, int options, size_t nb_
 
 	// projection avec ftruncate et mmap
 	if( ftruncate(fd, msg->memory_size) == -1 ){perror("ftruncate"); exit(1);}
-	struct stat bufStat;
+		struct stat bufStat;
 	fstat(fd, &bufStat);
 
 	int prot = build_prot(options);
@@ -384,7 +378,7 @@ int connex_msg(MESSAGE *msg, line *addr, const char *nom, int options){
 // Verifie si une file existe deja
 int file_exists (const char * f){
     struct stat buff;
-    if (stat(f, &buff) != 0) return 0;
+    if (lstat(f, &buff) != 0) return 0;
     return S_ISREG(buff.st_mode);
 }
 
