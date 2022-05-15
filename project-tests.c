@@ -186,6 +186,8 @@ int test_connexion(){
 	if(test_connexion_anonyme() == -1) { return -1; } //tester la connexion a une file anonyme par un processus enfant
 	if(test_connexion_excl() == -1) { return -1; } // tester la connexion en O_CREAT | O_EXCL
 
+	if(m_destruction(name1) != 0){ perror("test_connexion_excl : ECHEC : m_destruction()\n"); return -1; }
+
 	printf("test_connexion() : OK\n\n");
 	return 0;
 }
@@ -202,6 +204,8 @@ int test_connexion_simple(char name[]){
 
 	// Verification des attributs de la file
 	if( memory_check(file, msg_nb, max_length) == -1) { return -1; }
+
+	if(m_deconnexion(file) != 0){ perror("test_connexion_excl : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
 
 	return 0;
@@ -232,6 +236,8 @@ int test_connexion_existe(char name[]){
 	memmove( m->mtext, t, sizeof( t ));
 
 	if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_connexion_existe() : ECHEC : envoie message.\n"); return -1; }
+
+	if(m_deconnexion(file) != 0){ perror("test_connexion_excl : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 	free(m);
 
 	return 0;
@@ -259,6 +265,7 @@ int test_connexion_anonyme(){
 		memmove( m->mtext, t, sizeof( t ));
 
 		if( m_envoi( file, m, sizeof(t), 0) != 0 ){ printf("test_connexion_anonyme() : ECHEC : envoie message.\n"); _exit(-1); }
+		if(m_deconnexion(file) != 0){ perror("test_connexion_excl : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 		free(m);
 		_exit(0);
 	}
@@ -268,6 +275,7 @@ int test_connexion_anonyme(){
 		if(wait(&status) == -1 && errno != ECHILD) { printf("test_connexion_anonyme() : ECHEC : wait ECHILD\n"); return(-1);}
 		if(WIFEXITED(status) && WEXITSTATUS(status) != 0)
 			{ printf("test_connexion_anonyme() : ECHEC : status child\n"); return(-1); }
+		if(m_deconnexion(file) != 0){ perror("test_connexion_excl : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 	}
 	return 0;
 }
@@ -275,7 +283,7 @@ int test_connexion_anonyme(){
 
 //  Teste la connexion en O_CREAT | O_EXCL (le 1er test doit reussir, le second echouer)
 int test_connexion_excl(){
-	char name[] = "/cecinestpasunnom2";
+	char name[] = "/cecinestpasunnom3";
 	int msg_nb = 12;
 	size_t max_message_length = sizeof(char)*20;
 
@@ -303,29 +311,21 @@ int test_deconnexion(){
 	MESSAGE* file1 = m_connexion(name, O_RDWR | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(file1 == NULL){ printf("test_deconnexion() : ECHEC : creation file1\n"); return -1; }
 
-	MESSAGE* file2 = m_connexion(name, O_WRONLY); // O_RDONLY
+	MESSAGE* file2 = m_connexion(name, O_WRONLY);
 	if(file2 == NULL){ printf("test_deconnexion() : ECHEC : creation file2\n"); return -1; }
 
-	// printf("AVANT connexion file3\n"); //debug
 	MESSAGE* file3 = m_connexion(name, O_RDONLY);
-	//MESSAGE* file3 = m_connexion(name, O_RDONLY | O_CREAT, msg_nb, max_message_length, S_IRWXU | S_IRWXG | S_IRWXO);
-	//if(file3 == NULL){ printf("test_deconnexion() : ECHEC : creation file3\n"); return -1; }
-
-
-	// printf("file3 pipe capacity : %d\n", file3->shared_memory->head.pipe_capacity); //debug
+	if(file3 == NULL){ printf("test_deconnexion() : ECHEC : creation file3\n"); return -1; }
 
 	// Deconnexion sur file2
-	// printf("AVANT deconnexion file2\n"); //debug
 	if(m_deconnexion(file2) != 0){ perror("test_deconnexion : ECHEC : m_deconnexion(file2) != 0\n"); return -1; }
 
-	// printf("AVANT test file2\n"); //debug
 	// Teste que file2 n'est plus utilisable mais file1 et file3 le sont toujours
 	if((void*)file2->shared_memory != NULL){
 		perror("test_deconnexion : ECHEC : file2->shared_memory != NULL\n");
 		return -1;
 	}
-
-	// printf("AVANT test file1-3\n"); //debug
+	// Teste que file 1 et 3 restent utilisablent
 	if((void*)file1->shared_memory == NULL){
 		perror("test_deconnexion : ECHEC : file1->shared_memory == NULL\n");
 		return -1;
@@ -334,6 +334,10 @@ int test_deconnexion(){
 		perror("test_deconnexion : ECHEC : file3->shared_memory == NULL\n");
 		return -1;
 	}
+
+	if(m_destruction(name) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 2\n"); return(-1); }
+	if(m_deconnexion(file1) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+	if(m_deconnexion(file3) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
 	printf("test_deconnexion() : OK\n\n");
 	return 0;
@@ -362,6 +366,7 @@ int test_destruction(){
 			perror("test_destruction : ECHEC : connexion possible apres destruction\n");
 			_exit(-1);
 		}
+		if(m_deconnexion(file1) != 0){ perror("test_destruction : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 		_exit(0);
 	}
 	else{
@@ -408,6 +413,7 @@ int test_envoi_erreurs(){
 	MESSAGE* file2 = m_connexion(name2, O_RDWR | O_CREAT, 5, small_size, S_IRWXU | S_IRWXG | S_IRWXO);
 	int i = m_envoi( file2, m, sizeof(t), O_NONBLOCK);
 	if(error_check("test_envoi_erreurs() : ECHEC : gestion envoi d'un message trop long.", i, EMSGSIZE) == -1) {return -1;}
+
 	if(m_destruction(name2) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 2\n"); return(-1); }
 	if(m_deconnexion(file2) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 
@@ -422,6 +428,7 @@ int test_envoi_erreurs(){
 	i = m_envoi( file1, m, sizeof(t), O_NONBLOCK);
 	char text[] = "test_envoi_erreurs() : ECHEC : gestion envoi dans un tableau read only.";
 	if(error_check(text, i, EPERM) == -1) {return -1;}
+
 	if(m_destruction(name3) == -1) { printf("test_envoi_erreurs() : ECHEC : destruction 3\n"); return(-1); }
 	if(m_deconnexion(file3) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 	if(m_deconnexion(file1) != 0){ perror("test_envoi_erreurs : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
@@ -819,6 +826,7 @@ int test_processus_paralleles(int msg_nb){
 				printf("test_processus_paralleles() : ECHEC : receptions messages n %d.\n", j + 1); _exit(-1);
 			}
 		}
+		if(m_deconnexion(file) != 0){ perror("test_processus_paralleles : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 		_exit(0);
 	}
 	// Pere et fils A : chacun ENVOIE (en mode bloquant) le nombre maximal de messages que peut contenir la file
@@ -831,7 +839,10 @@ int test_processus_paralleles(int msg_nb){
 			}
 		}
 		// Le fils A
-		if(pidA == 0){ _exit(0); }
+		if(pidA == 0){
+			if(m_deconnexion(file) != 0){ perror("test_processus_paralleles : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
+			_exit(0);
+		}
 	}
 	// Le pere attend que les enfants aient termine et verifie leur valeur de retour
 	int status;
@@ -892,6 +903,8 @@ int test_signal(long type){
 			size_t s = m_reception(file, mb, sizeof(t), 0, 0);
 			if(reception_check(mb, "test_signal() : ECHEC : reception.", s, sizeof(t), sizeof(t), t[2], 1001) == -1)
 				{ _exit(-1); }
+
+			if(m_deconnexion(file) != 0){ perror("test_processus_paralleles : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 			free(mb);
 			_exit(0);
 		}
@@ -905,6 +918,8 @@ int test_signal(long type){
 
 			if(envois_repetes(file, 2, msg_size, ma, O_NONBLOCK) == -1)
 				{ printf(" test_signal()\n\n");  _exit(-1); }
+
+			if(m_deconnexion(file) != 0){ perror("test_processus_paralleles : ECHEC : m_deconnexion(file) != 0\n"); return -1; }
 			free(ma);
 
 			// A attend que l'enfant B ait termine et verifie sa valeur de retour

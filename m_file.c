@@ -19,12 +19,10 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 		}
 		// Connexion si la file existe deja
     	else if(file_exists(nom)){
-    		//printf("file existe deja\n"); // debug
     		if(connex_msg(msg, addr, nom, options) == -1) { return NULL; }
     	}
 		// Creation si la file n'existe pas
     	else{
-    		//printf("file n'existe pas\n"); // debug
     		// on empeche de creer une file en lecture seule
         	if(is_o_rdonly(options)){ return NULL; }
 
@@ -453,7 +451,7 @@ int is_o_excl(int options){
 	return (options>>k)&1;
 }
 
-//
+// Determine s'il s'agit d'une file anonyme ou non
 int anon_and_shared(const char *nom){
 	if(nom==NULL){
 		return MAP_SHARED | MAP_ANON;
