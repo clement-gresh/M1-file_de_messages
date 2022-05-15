@@ -101,6 +101,7 @@ int m_reception_erreurs(MESSAGE *file, int flags);
 void m_reception_occupees(MESSAGE *file, int current);
 void m_reception_libres(MESSAGE *file, int current);
 int m_reception_recherche(MESSAGE *file, long type, int flags);
+int m_reception_type_searched(MESSAGE *file, long type);
 int is_o_creat(int options);
 int is_o_rdonly(int options);
 int is_o_wronly(int options);

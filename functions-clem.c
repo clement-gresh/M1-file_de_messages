@@ -458,37 +458,13 @@ int m_reception_recherche(MESSAGE *file, long type, int flags){
 		if(flags == O_NONBLOCK && !msg_to_read){
 			return my_error("Pas de message \'type\' (mode non bloquant).\n", file, type, UNLOCK, 'b', EAGAIN);
 		}
-		// Attente si pas de message et mode bloquant (et signal la condition d'envoi)
+		// Attente si pas de message et mode bloquant (et signal la condition rcond)
 		else if(!msg_to_read){
 
-			// Si c'est la premiere fois que le processus fait wait, il doit d'abord indiquer le type qu'il recherche
+			// Si c'est la premiere fois que le processus fait wait, il indique d'abord le type de message qu'il recherche
 			// dans la liste types_searched
 			if(wait == false){
-				bool type_found = false;
-
-				// Cherche si le 'type' recherche apparait deja dans le tableau
-				for(position = 0; position < TYPE_SEARCH_NB; position++){
-					if(head->types_searched[position].type == type){
-						head->types_searched[position].number++;
-						type_found = true;
-						break;
-					}
-				}
-				// Sinon cherche si une case a 'number' a 0 et remplace son 'type'
-				if(!type_found){
-					for(position = 0; position < TYPE_SEARCH_NB; position++){
-						if(head->types_searched[position].number == 0){
-							head->types_searched[position].type = type;
-							head->types_searched[position].number = 1;
-							type_found = true;
-							break;
-						}
-					}
-				}
-				// Sinon indique a l'utilisateur qu'il n'y a pas de place dans le tableau et exit
-				if(!type_found){
-					return my_error("Pas de place dans types_searched[].\n", file, 0, UNLOCK, 'b', -1);
-				}
+				if((position = m_reception_type_searched(file, type)) == -1) { return -1; }
 			}
 			// Signal wcond avant de wait sur rcond
 			wait = true;
@@ -505,3 +481,34 @@ int m_reception_recherche(MESSAGE *file, long type, int flags){
 }
 
 
+// Met a jour le tableau type_searched en incrementant l'effectif du 'type' de message recherche
+int m_reception_type_searched(MESSAGE *file, long type){
+	struct header *head = &file->shared_memory->head;
+	int position;
+	bool type_found = false;
+
+	// Cherche si le 'type' recherche apparait deja dans le tableau
+	for(position = 0; position < TYPE_SEARCH_NB; position++){
+		if(head->types_searched[position].type == type){
+			head->types_searched[position].number++;
+			type_found = true;
+			break;
+		}
+	}
+	// Sinon cherche si une case a 'number' a 0 et remplace son 'type'
+	if(!type_found){
+		for(position = 0; position < TYPE_SEARCH_NB; position++){
+			if(head->types_searched[position].number == 0){
+				head->types_searched[position].type = type;
+				head->types_searched[position].number = 1;
+				type_found = true;
+				break;
+			}
+		}
+	}
+	// Sinon indique a l'utilisateur qu'il n'y a pas de place dans le tableau et exit
+	if(!type_found){
+		return my_error("Pas de place dans types_searched[].\n", file, 0, UNLOCK, 'b', -1);
+	}
+	return position;
+}
