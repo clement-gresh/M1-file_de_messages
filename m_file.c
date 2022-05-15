@@ -18,18 +18,24 @@ MESSAGE *m_connexion(const char *nom, int options, ...){
 			build_msg(msg, addr, NULL, options, nb_msg, len_max, mode);
 		}
 		// Connexion si la file existe deja
-    	else if(file_exists(nom)){
-    		//printf("file existe deja\n"); // debug
-    		if(connex_msg(msg, addr, nom, options) == -1) { return NULL; }
-    	}
-		// Creation si la file n'existe pas
     	else{
-    		//printf("file n'existe pas\n"); // debug
-    		// on empeche de creer une file en lecture seule
-        	if(is_o_rdonly(options)){ return NULL; }
+    		int fd = shm_open(nom,options,mode);
+    		struct stat bufStat;
+			fstat(fd, &bufStat);
 
-	    	if(build_msg(msg, addr, nom, options, nb_msg, len_max, mode) == -1) { return NULL; }
+			if(bufStat.st_size == 0){
+				// on empeche de creer une file en lecture seule
+        		if(is_o_rdonly(options)){ return NULL; }
+
+	    		if(build_msg(msg, addr, nom, options, nb_msg, len_max, mode) == -1) { return NULL; }
+			}
+			else{ 		// Creation si la file n'existe pas
+
+    			if(connex_msg(msg, addr, nom, options) == -1) { return NULL; }
+			}
+
     	}
+
 		va_end(parametersInfos);
     }
     else if(!is_o_creat(options) && nom != NULL){ // si la file existe
